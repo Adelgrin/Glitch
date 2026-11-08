@@ -11,6 +11,7 @@ import {
   type MatrixClient,
 } from "matrix-js-sdk";
 import { useAppStore } from "../store/app";
+import { initVerification, refreshStatus, SAS_METHOD } from "./verification";
 
 const SESSION_KEY = "mc.session";
 const PENDING_SSO_KEY = "mc.pendingSso";
@@ -153,6 +154,8 @@ export async function startClient(session: StoredSession): Promise<MatrixClient>
     deviceId: session.deviceId,
     timelineSupport: true,
     useAuthorizationHeader: true,
+    // Só comparação de emojis: assim o Element não oferece QR code, que ainda não suportamos
+    verificationMethods: [SAS_METHOD],
   });
   client = c;
 
@@ -196,8 +199,11 @@ export async function startClient(session: StoredSession): Promise<MatrixClient>
     });
   });
 
+  // Antes do primeiro sync, para não perder pedidos de verificação que chegam nele
+  initVerification(c);
   await c.startClient({ initialSyncLimit: 30, lazyLoadMembers: true, threadSupport: false });
   await firstSync;
+  void refreshStatus();
   scheduleBump();
   return c;
 }

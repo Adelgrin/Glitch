@@ -46,6 +46,19 @@ Canais de servidores privados usam a regra de entrada `restricted`, então quem 
 - Avatar, ícone e banner do servidor também passam pelo editor de posicionamento. GIFs podem ser usados sem recorte para manter a animação.
 - CSS personalizado e exportar/importar tema em JSON.
 
+## Verificação de sessão (emojis)
+
+Igual ao Element: numa sessão nova aparece o aviso **Verifique esta sessão** (também em **Configurações › Segurança**).
+
+1. O MatrixCord manda um pedido de verificação para os seus outros dispositivos.
+2. Você aceita no Element (ou em outro MatrixCord) e os dois mostram os mesmos 7 emojis.
+3. Confirmando que combinam, esta sessão fica assinada pela sua identidade, e o outro dispositivo envia a chave do backup.
+4. O MatrixCord baixa o backup de chaves para que as mensagens criptografadas antigas possam ser lidas.
+
+Pedidos vindos de outros dispositivos também aparecem aqui, e uma sessão já verificada pode verificar as outras pela lista em **Segurança › Sessões**.
+
+Em dev, `?preview=verify&step=intro|waiting|incoming|sas|done|toast` mostra as telas com dados falsos.
+
 ## Estrutura
 
 ```
@@ -58,7 +71,7 @@ src/
 
 ## Limitações conhecidas
 
-- Criptografia de ponta a ponta: mensagens são decifradas, mas ainda não há verificação de sessão nem backup de chaves. Canais novos são criados sem E2EE por padrão.
+- Criptografia de ponta a ponta: a sessão é verificada comparando emojis com outro dispositivo (veja abaixo). Ainda não há login com a chave de recuperação nem verificação por QR code, e não dá para configurar a assinatura cruzada do zero (faça isso uma vez pelo Element). Canais novos são criados sem E2EE por padrão.
 - Chamadas sem E2EE de mídia; numa sala onde o Element Call usa mídia criptografada, as pessoas não vão se ouvir entre os dois clientes.
 - Conecta só ao SFU de quem iniciou a chamada (cenário multi-SFU entre servidores diferentes ainda não é suportado).
 - Login por senha e SSO; o login OIDC nativo (MAS) ainda não foi implementado.

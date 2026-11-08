@@ -7,9 +7,11 @@ import { switchDevice, useVoice } from "../../voice/voice";
 import Avatar from "../Avatar";
 import { ImageField } from "./Modal";
 import { EscClose } from "./ServerSettingsModal";
-import { IconX } from "../icons";
+import { IconShieldAlert, IconShieldCheck, IconX } from "../icons";
+import { refreshStatus, startRestore, startSelfVerification, useVerification, verifyOtherDevice } from "../../matrix/verification";
+import { RestoreStatus } from "./VerificationModal";
 
-type Tab = "account" | "appearance" | "voice" | "advanced";
+type Tab = "account" | "security" | "appearance" | "voice" | "advanced";
 
 export default function UserSettingsModal({ onClose, initialTab }: { onClose(): void; initialTab?: string }) {
   const [tab, setTab] = useState<Tab>((initialTab as Tab) ?? "account");
@@ -20,6 +22,9 @@ export default function UserSettingsModal({ onClose, initialTab }: { onClose(): 
           <div className="section-label">Configurações de usuário</div>
           <button className={tab === "account" ? "active" : ""} onClick={() => setTab("account")}>
             Minha conta
+          </button>
+          <button className={tab === "security" ? "active" : ""} onClick={() => setTab("security")}>
+            Segurança
           </button>
           <div className="section-label">Configurações do app</div>
           <button className={tab === "appearance" ? "active" : ""} onClick={() => setTab("appearance")}>
@@ -40,6 +45,7 @@ export default function UserSettingsModal({ onClose, initialTab }: { onClose(): 
       <div className="settings-content">
         <div className="settings-content-inner">
           {tab === "account" && <Account />}
+          {tab === "security" && <Security />}
           {tab === "appearance" && <Appearance />}
           {tab === "voice" && <VoiceVideo />}
           {tab === "advanced" && <Advanced />}
@@ -119,6 +125,100 @@ function Account() {
           <span>{cryptoReady ? "Ativa (as chaves ficam neste navegador)" : "Indisponível"}</span>
         </div>
         {msg && <p className="small">{msg}</p>}
+      </div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function Security() {
+  const cryptoReady = useAppStore((s) => s.cryptoReady);
+  const status = useVerification((s) => s.status);
+  const restore = useVerification((s) => s.restore);
+
+  useEffect(() => {
+    void refreshStatus();
+  }, []);
+
+  if (!cryptoReady) {
+    return (
+      <>
+        <h2>Segurança</h2>
+        <p className="muted">A criptografia não pôde ser iniciada neste navegador.</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h2>Segurança</h2>
+
+      <h3>Esta sessão</h3>
+      <div className={`security-card ${status.thisDeviceVerified ? "ok" : "warn"}`}>
+        <div className="security-card-icon">
+          {status.thisDeviceVerified ? <IconShieldCheck size={28} /> : <IconShieldAlert size={28} />}
+        </div>
+        <div className="grow">
+          <strong>{!status.loaded ? "Verificando…" : status.thisDeviceVerified ? "Sessão verificada" : "Sessão não verificada"}</strong>
+          <p className="muted small">
+            {status.thisDeviceVerified
+              ? "Seus outros dispositivos e contatos confiam nesta sessão."
+              : status.crossSigningSetUp
+                ? "Compare emojis com outro dispositivo já conectado (como o Element) para copiar as chaves e ler suas mensagens criptografadas."
+                : "Sua conta ainda não tem assinatura cruzada. Configure a criptografia uma vez pelo Element e depois verifique esta sessão aqui."}
+          </p>
+        </div>
+        {status.loaded && !status.thisDeviceVerified && status.crossSigningSetUp && (
+          <button className="btn primary small" onClick={() => void startSelfVerification()}>
+            Verificar
+          </button>
+        )}
+      </div>
+
+      <h3>Backup de chaves</h3>
+      <div className="kv">
+        <span>Backup no servidor</span>
+        <span>{status.backupVersion ? `Sim (versão ${status.backupVersion})` : "Não encontrado"}</span>
+        <span>Chave neste dispositivo</span>
+        <span>{status.backupKeyCached ? "Sim" : "Não — verifique a sessão para recebê-la"}</span>
+        <span>Enviando chaves novas</span>
+        <span>{status.backupActive ? "Sim" : "Não"}</span>
+      </div>
+      {status.backupKeyCached && status.backupVersion && (
+        <div className="row gap" style={{ marginTop: 12 }}>
+          <button className="btn secondary small" disabled={!!restore?.running} onClick={() => void startRestore()}>
+            {restore?.running ? "Restaurando…" : "Restaurar chaves do backup"}
+          </button>
+        </div>
+      )}
+      {restore && <RestoreStatus />}
+
+      <h3>Sessões</h3>
+      <div className="device-list">
+        {status.devices.map((d) => (
+          <div className="device-row" key={d.deviceId}>
+            <span className={`device-shield ${d.verified ? "ok" : "warn"}`} title={d.verified ? "Verificada" : "Não verificada"}>
+              {d.verified ? <IconShieldCheck size={20} /> : <IconShieldAlert size={20} />}
+            </span>
+            <div className="grow">
+              <div className="device-name">
+                {d.name}
+                {d.current && <span className="badge-inline">esta sessão</span>}
+              </div>
+              <div className="muted small">
+                {d.deviceId}
+                {d.lastSeen ? ` · visto em ${new Date(d.lastSeen).toLocaleString("pt-BR")}` : ""}
+              </div>
+            </div>
+            {!d.current && !d.verified && status.thisDeviceVerified && status.canSignOthers && (
+              <button className="btn secondary small" onClick={() => void verifyOtherDevice(d.deviceId)}>
+                Verificar
+              </button>
+            )}
+          </div>
+        ))}
+        {status.loaded && status.devices.length === 0 && <p className="muted small">Nenhuma sessão encontrada.</p>}
       </div>
     </>
   );

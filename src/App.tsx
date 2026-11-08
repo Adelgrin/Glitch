@@ -4,6 +4,7 @@ import Login from "./components/Login";
 import MainLayout from "./components/MainLayout";
 import ThemeApplier from "./components/ThemeApplier";
 import UserSettingsModal from "./components/modals/UserSettingsModal";
+import VerifyPreview from "./components/modals/VerifyPreview";
 
 type Phase = { kind: "boot" } | { kind: "login"; error?: string } | { kind: "loading" } | { kind: "ready" };
 
@@ -21,11 +22,12 @@ export default function App() {
     }
   };
 
-  // Rota só de desenvolvimento para testar a tela de aparência sem login
-  const devPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "appearance";
+  // Rotas só de desenvolvimento para testar telas sem login
+  const previewParam = import.meta.env.DEV ? new URLSearchParams(location.search).get("preview") : null;
+  const devPreview = previewParam === "appearance";
 
   useEffect(() => {
-    if (devPreview) return;
+    if (previewParam) return;
     (async () => {
       try {
         const sso = await completeSsoLogin();
@@ -39,6 +41,7 @@ export default function App() {
     })();
   }, []);
 
+  if (previewParam === "verify") return <VerifyPreview />;
   if (devPreview) {
     return (
       <>

@@ -9,6 +9,7 @@ import ChatView from "./chat/ChatView";
 import CallView from "./call/CallView";
 import MemberList from "./MemberList";
 import ModalHost from "./modals/ModalHost";
+import VerificationModal, { VerificationToast } from "./modals/VerificationModal";
 import { IconChat } from "./icons";
 
 export default function MainLayout() {
@@ -48,6 +49,8 @@ export default function MainLayout() {
       </main>
       {showMembers && room && !voice && <MemberList room={room} spaceId={spaceId} />}
       <ModalHost />
+      <VerificationModal />
+      <VerificationToast />
     </div>
   );
 }
