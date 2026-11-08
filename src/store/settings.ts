@@ -73,6 +73,8 @@ export interface AppearanceSettings {
   theme: string; // chave de THEME_PRESETS ou "custom"
   accent: string;
   colors: ThemeColors;
+  /** cores dos botões "Criar um servidor" e "Entrar em um servidor" (independem do tema) */
+  railColors: { create: string; join: string };
   fontScale: number;
   chatFont: "system" | "inter" | "serif" | "mono" | "rounded";
   density: "cozy" | "compact";
@@ -129,6 +131,7 @@ const defaultAppearance: AppearanceSettings = {
   theme: "dark",
   accent: THEME_PRESETS.dark.accent,
   colors: { ...THEME_PRESETS.dark.colors },
+  railColors: { create: "#23a55a", join: "#23a55a" },
   fontScale: 1,
   chatFont: "system",
   density: "cozy",
@@ -208,6 +211,7 @@ export const useSettings = create<SettingsState>()(
             ...defaultAppearance,
             ...p.appearance,
             appBackground: { ...defaultAppearance.appBackground, ...p.appearance?.appBackground },
+            railColors: { ...defaultAppearance.railColors, ...p.appearance?.railColors },
           },
           voice: { ...defaultVoice, ...p.voice },
           advanced: { ...current.advanced, ...p.advanced },

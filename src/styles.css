@@ -665,12 +665,20 @@ input[type="color"]::-moz-color-swatch {
   background: var(--accent);
   color: var(--on-accent);
 }
-.rail-action {
-  color: var(--green);
+/* Criar / entrar em servidor: cores personalizáveis (Aparência › Cores personalizadas) */
+.rail-action.create {
+  color: var(--rail-create, var(--green));
 }
-.rail-item:hover .rail-action {
-  background: var(--green);
-  color: #fff;
+.rail-item:hover .rail-action.create {
+  background: var(--rail-create, var(--green));
+  color: var(--rail-create-on, #fff);
+}
+.rail-action.join {
+  color: var(--rail-join, var(--green));
+}
+.rail-item:hover .rail-action.join {
+  background: var(--rail-join, var(--green));
+  color: var(--rail-join-on, #fff);
 }
 .rail-badge {
   position: absolute;
@@ -3923,4 +3931,13 @@ input[type="color"]::-moz-color-swatch {
 }
 .select.version-select {
   width: 220px;
+}
+.color-field-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.color-field-with-icon svg {
+  color: var(--muted);
+  flex-shrink: 0;
 }

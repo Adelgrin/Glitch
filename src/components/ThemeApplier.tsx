@@ -42,6 +42,10 @@ export default function ThemeApplier() {
     set("--accent", a.accent);
     set("--accent-rgb", hexToRgb(a.accent).join(","));
     set("--on-accent", luminance(a.accent) > 0.55 ? "#111" : "#fff");
+    set("--rail-create", a.railColors.create);
+    set("--rail-create-on", luminance(a.railColors.create) > 0.55 ? "#111" : "#fff");
+    set("--rail-join", a.railColors.join);
+    set("--rail-join-on", luminance(a.railColors.join) > 0.55 ? "#111" : "#fff");
     set("--hover", isLight ? "rgba(0,0,0,.06)" : "rgba(255,255,255,.06)");
     set("--active", isLight ? "rgba(0,0,0,.1)" : "rgba(255,255,255,.1)");
     set("--border", isLight ? "rgba(0,0,0,.12)" : "rgba(255,255,255,.08)");

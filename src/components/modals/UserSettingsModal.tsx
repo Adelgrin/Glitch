@@ -7,7 +7,7 @@ import { switchDevice, useVoice } from "../../voice/voice";
 import Avatar from "../Avatar";
 import { ImageField } from "./Modal";
 import { EscClose } from "./ServerSettingsModal";
-import { IconShieldAlert, IconShieldCheck, IconX } from "../icons";
+import { IconCompass, IconPlus, IconShieldAlert, IconShieldCheck, IconX } from "../icons";
 import { refreshStatus, startRestore, startSelfVerification, useVerification, verifyOtherDevice } from "../../matrix/verification";
 import { RestoreStatus } from "./VerificationModal";
 import { BannerEditor, CallColorEditor } from "./ProfileAppearance";
@@ -332,10 +332,10 @@ function Appearance() {
   const setColor = (k: keyof ThemeColors, v: string) => set({ theme: "custom", colors: { ...a.colors, [k]: v } });
 
   const exportTheme = () => {
-    const { customCss, accent, colors, radius, fontScale, chatFont, density, avatarShape, panelOpacity } = a;
+    const { customCss, accent, colors, railColors, radius, fontScale, chatFont, density, avatarShape, panelOpacity } = a;
     // A imagem fica de fora (seria grande demais); os ajustes do fundo vão junto
     const appBackground = { ...a.appBackground, image: null };
-    const json = JSON.stringify({ accent, colors, radius, fontScale, chatFont, density, avatarShape, panelOpacity, appBackground, customCss });
+    const json = JSON.stringify({ accent, colors, railColors, radius, fontScale, chatFont, density, avatarShape, panelOpacity, appBackground, customCss });
     void navigator.clipboard.writeText(json);
     alert("Tema copiado para a área de transferência!");
   };
@@ -391,6 +391,18 @@ function Appearance() {
             <span>{l}</span>
           </label>
         ))}
+        <label className="color-field">
+          <input type="color" value={a.railColors.create} onChange={(e) => set({ railColors: { ...a.railColors, create: e.target.value } })} />
+          <span className="color-field-with-icon">
+            <IconPlus size={14} /> Criar servidor
+          </span>
+        </label>
+        <label className="color-field">
+          <input type="color" value={a.railColors.join} onChange={(e) => set({ railColors: { ...a.railColors, join: e.target.value } })} />
+          <span className="color-field-with-icon">
+            <IconCompass size={14} /> Entrar em servidor
+          </span>
+        </label>
       </div>
 
       <div className="settings-card">

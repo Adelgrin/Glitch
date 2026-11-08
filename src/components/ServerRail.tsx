@@ -94,12 +94,12 @@ export default function ServerRail() {
           </RailItem>
         ))}
       <RailItem label="Criar um servidor" active={false} onClick={() => openModal({ type: "createServer" })}>
-        <div className="rail-action">
+        <div className="rail-action create">
           <IconPlus size={24} />
         </div>
       </RailItem>
       <RailItem label="Entrar em um servidor" active={false} onClick={() => openModal({ type: "joinServer" })}>
-        <div className="rail-action">
+        <div className="rail-action join">
           <IconCompass size={24} />
         </div>
       </RailItem>
