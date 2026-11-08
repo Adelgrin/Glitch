@@ -12,6 +12,7 @@ import { refreshStatus, startRestore, startSelfVerification, useVerification, ve
 import { RestoreStatus } from "./VerificationModal";
 import { BannerEditor, CallColorEditor } from "./ProfileAppearance";
 import { UserPacksPanel } from "./StickerPacks";
+import Select, { type SelectOption } from "../Select";
 
 type Tab = "account" | "security" | "appearance" | "stickers" | "voice" | "advanced";
 
@@ -460,13 +461,18 @@ function Appearance() {
       <div className="two-col">
         <label className="field">
           <span>Fonte</span>
-          <select value={a.chatFont} onChange={(e) => set({ chatFont: e.target.value as AppearanceSettings["chatFont"] })}>
-            <option value="system">Padrão do sistema</option>
-            <option value="inter">Inter</option>
-            <option value="rounded">Arredondada</option>
-            <option value="serif">Serifada</option>
-            <option value="mono">Monoespaçada</option>
-          </select>
+          <Select
+            value={a.chatFont}
+            aria-label="Fonte"
+            onChange={(v) => set({ chatFont: v })}
+            options={[
+              { value: "system", label: "Padrão do sistema" },
+              { value: "inter", label: <span style={{ fontFamily: "Inter, 'Segoe UI', sans-serif" }}>Inter</span>, text: "Inter" },
+              { value: "rounded", label: <span style={{ fontFamily: "Nunito, 'Varela Round', 'Segoe UI', sans-serif" }}>Arredondada</span>, text: "Arredondada" },
+              { value: "serif", label: <span style={{ fontFamily: "Georgia, serif" }}>Serifada</span>, text: "Serifada" },
+              { value: "mono", label: <span style={{ fontFamily: "'Cascadia Code', Consolas, monospace" }}>Monoespaçada</span>, text: "Monoespaçada" },
+            ] satisfies SelectOption<AppearanceSettings["chatFont"]>[]}
+          />
         </label>
         <Slider label="Tamanho da fonte" value={a.fontScale} min={0.8} max={1.3} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ fontScale: v })} />
       </div>
@@ -606,24 +612,27 @@ function VoiceVideo() {
       <div className="two-col">
         <label className="field">
           <span>Dispositivo de entrada</span>
-          <select value={v.inputDeviceId} onChange={(e) => pick("audioinput", e.target.value)}>
-            {inputs.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || "Microfone"}
-              </option>
-            ))}
-          </select>
+          <Select
+            value={v.inputDeviceId}
+            aria-label="Dispositivo de entrada"
+            placeholder="Padrão"
+            onChange={(id) => pick("audioinput", id)}
+            options={inputs.map((d) => ({ value: d.deviceId, label: d.label || "Microfone" }))}
+          />
         </label>
         <label className="field">
           <span>Dispositivo de saída</span>
-          <select value={v.outputDeviceId} onChange={(e) => pick("audiooutput", e.target.value)}>
-            {outputs.length === 0 && <option value="default">Padrão</option>}
-            {outputs.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || "Alto-falante"}
-              </option>
-            ))}
-          </select>
+          <Select
+            value={v.outputDeviceId}
+            aria-label="Dispositivo de saída"
+            placeholder="Padrão"
+            onChange={(id) => pick("audiooutput", id)}
+            options={
+              outputs.length
+                ? outputs.map((d) => ({ value: d.deviceId, label: d.label || "Alto-falante" }))
+                : [{ value: "default", label: "Padrão" }]
+            }
+          />
         </label>
       </div>
       <MicTest deviceId={v.inputDeviceId} />
@@ -646,14 +655,13 @@ function VoiceVideo() {
       <h3>Vídeo</h3>
       <label className="field">
         <span>Câmera</span>
-        <select value={v.videoDeviceId} onChange={(e) => pick("videoinput", e.target.value)}>
-          <option value="">Padrão</option>
-          {cams.map((d) => (
-            <option key={d.deviceId} value={d.deviceId}>
-              {d.label || "Câmera"}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={v.videoDeviceId}
+          aria-label="Câmera"
+          placeholder="Padrão"
+          onChange={(id) => pick("videoinput", id)}
+          options={[{ value: "", label: "Padrão" }, ...cams.map((d) => ({ value: d.deviceId, label: d.label || "Câmera" }))]}
+        />
       </label>
       <CameraPreview deviceId={v.videoDeviceId} />
 

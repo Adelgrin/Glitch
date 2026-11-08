@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { EventType, RelationType, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { getClient } from "../../matrix/client";
 import { useEncryptedMedia, useMxc, type EncryptedFileInfo } from "../../matrix/media";
-import { useAppStore } from "../../store/app";
+import { anchorOf, useAppStore } from "../../store/app";
 import { useSettings } from "../../store/settings";
 import Avatar, { colorFor } from "../Avatar";
 import ExpressionPicker from "./ExpressionPicker";
@@ -77,7 +77,7 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
               name={name}
               id={sender}
               size={40}
-              onClick={() => openModal({ type: "userProfile", userId: sender, roomId: room.roomId })}
+              onClick={(e) => openModal({ type: "userProfile", userId: sender, roomId: room.roomId, anchor: anchorOf(e.currentTarget) })}
             />
           )}
         </div>
@@ -87,7 +87,7 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
               <span
                 className="message-author"
                 style={{ color: powerColor(member?.powerLevel ?? 0) ?? undefined }}
-                onClick={() => openModal({ type: "userProfile", userId: sender, roomId: room.roomId })}
+                onClick={(e) => openModal({ type: "userProfile", userId: sender, roomId: room.roomId, anchor: anchorOf(e.currentTarget) })}
               >
                 {name}
               </span>

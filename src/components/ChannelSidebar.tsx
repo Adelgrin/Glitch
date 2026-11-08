@@ -13,7 +13,7 @@ import {
   roomDisplayName,
 } from "../matrix/rooms";
 import { useMxc } from "../matrix/media";
-import { useAppStore, useVersion } from "../store/app";
+import { anchorOf, useAppStore, useVersion } from "../store/app";
 import { joinVoice, useVoice } from "../voice/voice";
 import { useRtcMembers } from "../voice/useRtcMembers";
 import Avatar from "./Avatar";
@@ -430,7 +430,7 @@ function VoiceChannelItem({ roomId, spaceId, info }: { roomId: string; spaceId: 
               <div
                 key={m.userId}
                 className="voice-member"
-                onClick={() => openModal({ type: "userProfile", userId: m.userId, roomId })}
+                onClick={(e) => openModal({ type: "userProfile", userId: m.userId, roomId, anchor: anchorOf(e.currentTarget) })}
               >
                 <Avatar
                   mxc={member?.getMxcAvatarUrl() ?? c.getUser(m.userId)?.avatarUrl}

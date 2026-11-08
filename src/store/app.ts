@@ -1,6 +1,19 @@
 import { create } from "zustand";
 import type { SyncState } from "matrix-js-sdk";
 
+/** Retângulo do elemento clicado: o perfil abre como cartão ao lado dele. */
+export interface ProfileAnchor {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function anchorOf(el: Element): ProfileAnchor {
+  const r = el.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+
 export type ModalState =
   | { type: "createServer" }
   | { type: "joinServer" }
@@ -15,7 +28,7 @@ export type ModalState =
     }
   | { type: "invite"; roomId: string }
   | { type: "userSettings"; tab?: string }
-  | { type: "userProfile"; userId: string; roomId?: string }
+  | { type: "userProfile"; userId: string; roomId?: string; anchor?: ProfileAnchor }
   | { type: "startDm" };
 
 interface AppState {

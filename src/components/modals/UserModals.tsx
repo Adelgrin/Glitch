@@ -2,10 +2,8 @@ import { useEffect, useState } from "react";
 import { getClient } from "../../matrix/client";
 import { startDm } from "../../matrix/rooms";
 import { useAppStore } from "../../store/app";
-import { useSettings } from "../../store/settings";
-import { setUserVolume, useVoice } from "../../voice/voice";
 import Avatar from "../Avatar";
-import ProfileBanner from "../ProfileBanner";
+import { UserCard } from "../UserCard";
 import { Modal } from "./Modal";
 
 function normalizeUserId(input: string) {
@@ -151,58 +149,11 @@ export function StartDmModal({ onClose }: { onClose(): void }) {
   );
 }
 
+/** Perfil no centro da tela (usado por "Ver perfil completo"); o mesmo conteúdo do cartão. */
 export function UserProfileModal({ onClose, userId, roomId }: { onClose(): void; userId: string; roomId?: string }) {
-  const c = getClient();
-  const me = c.getUserId();
-  const room = roomId ? c.getRoom(roomId) : null;
-  const member = room?.getMember(userId);
-  const user = c.getUser(userId);
-  const [profile, setProfile] = useState<{ displayname?: string; avatar_url?: string }>({});
-  const inCall = useVoice((s) => s.participants.some((p) => p.userId === userId && !p.isLocal));
-  const volume = useSettings((s) => s.voice.userVolumes[userId] ?? 100);
-
-  useEffect(() => {
-    c.getProfileInfo(userId)
-      .then(setProfile)
-      .catch(() => undefined);
-  }, [c, userId]);
-
-  const name = member?.name ?? user?.displayName ?? profile.displayname ?? userId;
-  const avatar = member?.getMxcAvatarUrl() ?? user?.avatarUrl ?? profile.avatar_url;
-  const presence = user?.presence;
-  const pl = member?.powerLevel ?? 0;
-
   return (
     <Modal onClose={onClose} className="profile-modal">
-      <ProfileBanner userId={userId} />
-      <div className="profile-avatar">
-        <Avatar mxc={avatar} name={name} id={userId} size={92} status={(presence as "online") ?? null} />
-      </div>
-      <div className="profile-card">
-        <h2 className="left">{name}</h2>
-        <div className="muted selectable">{userId}</div>
-        {pl >= 50 && <div className="role-chip">{pl >= 100 ? "Administrador" : "Moderador"}</div>}
-        {user?.presenceStatusMsg && <p>{user.presenceStatusMsg}</p>}
-        {inCall && (
-          <label className="field">
-            <span>Volume do usuário — {volume}%</span>
-            <input type="range" min={0} max={200} value={volume} onChange={(e) => setUserVolume(userId, Number(e.target.value))} />
-          </label>
-        )}
-        {userId !== me && (
-          <button
-            className="btn primary block"
-            onClick={async () => {
-              const rid = await startDm(userId);
-              useAppStore.getState().selectSpace(null);
-              useAppStore.getState().selectRoom(rid);
-              onClose();
-            }}
-          >
-            Enviar mensagem
-          </button>
-        )}
-      </div>
+      <UserCard userId={userId} roomId={roomId} onClose={onClose} />
     </Modal>
   );
 }

@@ -10,7 +10,6 @@ import {
   myPowerLevel,
   parentSpaceIds,
   roomCreators,
-  roleName,
   roomVersionSupports,
   savePowerLevels,
   setRoomNotifState,
@@ -25,6 +24,7 @@ import Avatar from "../Avatar";
 import { ImageField } from "./Modal";
 import { EscClose } from "./ServerSettingsModal";
 import { RoomPacksPanel } from "./StickerPacks";
+import Select, { roleOptions } from "../Select";
 import { IconX } from "../icons";
 
 type Tab = "general" | "security" | "roles" | "emotes" | "notifications" | "advanced";
@@ -153,8 +153,6 @@ function RadioCard({
   );
 }
 
-const ROLE_LEVELS = [0, 50, 100];
-
 /** Seletor de cargo (Membro/Moderador/Administrador/Personalizado). */
 function LevelSelect({
   value,
@@ -167,14 +165,14 @@ function LevelSelect({
   disabled?: boolean;
   onChange(level: number): void;
 }) {
-  const options = ROLE_LEVELS.includes(value) ? ROLE_LEVELS : [...ROLE_LEVELS, value].sort((a, b) => a - b);
   return (
-    <select
+    <Select
       className="level-select"
       value={value}
+      options={roleOptions(value, maxLevel)}
       disabled={disabled}
-      onChange={(e) => {
-        const v = e.target.value;
+      aria-label="Cargo"
+      onChange={(v) => {
         if (v === "custom") {
           const n = prompt(
             Number.isFinite(maxLevel) ? `Nível personalizado (até ${maxLevel}):` : "Nível personalizado (número):",
@@ -182,25 +180,13 @@ function LevelSelect({
           );
           const num = n === null ? NaN : parseInt(n, 10);
           if (!Number.isNaN(num) && num <= maxLevel) onChange(num);
-          else e.target.value = String(value);
           return;
         }
-        onChange(Number(v));
+        onChange(v);
       }}
-    >
-      {options
-        .slice()
-        .reverse()
-        .map((l) => (
-          <option key={l} value={l} disabled={l > maxLevel}>
-            {roleName(l)}
-          </option>
-        ))}
-      <option value="custom">Personalizado…</option>
-    </select>
+    />
   );
 }
-
 /* ------------------------------------------------------------------ */
 /* Geral                                                               */
 /* ------------------------------------------------------------------ */
@@ -364,14 +350,16 @@ function Addresses({ room }: { room: Room }) {
       </label>
       <label className="field">
         <span>Endereço principal</span>
-        <select value={canonical ?? ""} disabled={!canAlias} onChange={(e) => void setMain(e.target.value || null)}>
-          <option value="">Nenhum</option>
-          {[...new Set([...(canonical ? [canonical] : []), ...(local ?? []), ...altAliases])].map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={canonical ?? ""}
+          disabled={!canAlias}
+          aria-label="Endereço principal"
+          options={[
+            { value: "", label: "Nenhum" },
+            ...[...new Set([...(canonical ? [canonical] : []), ...(local ?? []), ...altAliases])].map((a) => ({ value: a, label: a })),
+          ]}
+          onChange={(v) => void setMain(v || null)}
+        />
       </label>
       <div className="field-label">Endereços locais (em {serverName()})</div>
       <div className="alias-list">
@@ -955,15 +943,21 @@ export function AdvancedPanel({ room, onClose }: { room: Room; onClose(): void }
             pelo seu servidor é a <strong>{versions.default}</strong>.
           </p>
           <div className="row gap">
-            <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              {Object.entries(versions.available)
+            <Select
+              className="version-select"
+              value={target}
+              aria-label="Versão da sala"
+              onChange={(v) => setTarget(String(v))}
+              options={Object.entries(versions.available)
                 .sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]) || a[0].localeCompare(b[0]))
-                .map(([v, s]) => (
-                  <option key={v} value={v}>
-                    {v} {s === "stable" ? "" : "(instável)"} {v === versions.default ? "· recomendada" : ""}
-                  </option>
-                ))}
-            </select>
+                .map(([v, s]) => ({
+                  value: v,
+                  label: `Versão ${v}`,
+                  hint: [s === "stable" ? "estável" : "instável", v === versions.default ? "recomendada" : "", v === current ? "atual" : ""]
+                    .filter(Boolean)
+                    .join(" · "),
+                }))}
+            />
             <button
               className="btn danger-outline small"
               disabled={!can(EventType.RoomTombstone) || !target || target === current}

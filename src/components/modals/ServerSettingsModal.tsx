@@ -9,6 +9,7 @@ import { ImageField } from "./Modal";
 import { IconX } from "../icons";
 import { AdvancedPanel, RolesPanel, SecurityPanel } from "./RoomSettingsModal";
 import { RoomPacksPanel } from "./StickerPacks";
+import Select, { roleOptions } from "../Select";
 
 export default function ServerSettingsModal({ onClose, spaceId }: { onClose(): void; spaceId: string }) {
   useVersion();
@@ -62,7 +63,7 @@ export function EscClose({ onClose }: { onClose(): void }) {
   // Fecha com Esc (ignorado enquanto o recortador estiver aberto, pois ele captura antes)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector(".cropper-modal, .verify-modal, .banner-menu")) onClose();
+      if (e.key === "Escape" && !document.querySelector(".cropper-modal, .verify-modal, .banner-menu, .select-menu, .xpicker")) onClose();
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -203,15 +204,27 @@ function Members({ spaceId }: { spaceId: string }) {
               <div className="ellipsis">{m.name}</div>
               <div className="muted tiny ellipsis">{m.userId}</div>
             </div>
-            <select
-              value={m.powerLevel >= 100 ? 100 : m.powerLevel >= 50 ? 50 : 0}
-              disabled={!canPl || m.userId === me || m.powerLevel >= myPl}
-              onChange={(e) => setPl(m.userId, Number(e.target.value))}
-            >
-              <option value={100}>Administrador</option>
-              <option value={50}>Moderador</option>
-              <option value={0}>Membro</option>
-            </select>
+            {m.powerLevel === Infinity ? (
+              <span className="role-fixed" title="Quem criou a sala tem poder máximo">
+                Criador
+              </span>
+            ) : (
+              <Select
+                className="level-select"
+                value={m.powerLevel}
+                options={roleOptions(m.powerLevel, myPl)}
+                disabled={!canPl || m.userId === me || m.powerLevel >= myPl}
+                aria-label={`Cargo de ${m.name}`}
+                onChange={(v) => {
+                  if (v === "custom") {
+                    const n = parseInt(prompt("Nível de poder (número):", String(m.powerLevel)) ?? "", 10);
+                    if (!Number.isNaN(n) && n <= myPl) void setPl(m.userId, n);
+                    return;
+                  }
+                  void setPl(m.userId, v);
+                }}
+              />
+            )}
             {m.userId !== me && myPl >= 50 && m.powerLevel < myPl && (
               <>
                 <button

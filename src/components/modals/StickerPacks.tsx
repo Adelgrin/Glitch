@@ -19,6 +19,7 @@ import {
 } from "../../matrix/imagePacks";
 import { useVersion } from "../../store/app";
 import CustomEmoji from "../chat/CustomEmoji";
+import Select from "../Select";
 import { IconChevronDown, IconChevronRight, IconImage, IconX } from "../icons";
 
 type UsageChoice = "both" | "emoticon" | "sticker";
@@ -203,17 +204,19 @@ export function PackEditor({ packRef, pack, onRemoved }: { packRef: PackRef; pac
           </label>
           <label className="field">
             <span>Usar como</span>
-            <select
+            <Select
               value={usage}
-              onChange={(e) => {
-                setUsage(e.target.value as UsageChoice);
+              aria-label="Usar como"
+              options={[
+                { value: "both", label: "Emojis e figurinhas" },
+                { value: "emoticon", label: "Só emojis" },
+                { value: "sticker", label: "Só figurinhas" },
+              ]}
+              onChange={(v) => {
+                setUsage(v as UsageChoice);
                 touch();
               }}
-            >
-              <option value="both">Emojis e figurinhas</option>
-              <option value="emoticon">Só emojis</option>
-              <option value="sticker">Só figurinhas</option>
-            </select>
+            />
           </label>
         </div>
       )}
@@ -261,20 +264,21 @@ export function PackEditor({ packRef, pack, onRemoved }: { packRef: PackRef; pac
                     />
                     <span>:</span>
                   </div>
-                  <select
+                  <Select
                     className="pack-usage"
                     value={img.usage ?? "inherit"}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    aria-label="Uso da imagem"
+                    options={[
+                      { value: "inherit", label: "Padrão do pacote" },
+                      { value: "both", label: "Emoji e figurinha" },
+                      { value: "emoticon", label: "Só emoji" },
+                      { value: "sticker", label: "Só figurinha" },
+                    ]}
+                    onChange={(v) => {
                       setImages((cur) => cur.map((x) => (x.key === img.key ? { ...x, usage: v === "inherit" ? null : (v as UsageChoice) } : x)));
                       touch();
                     }}
-                  >
-                    <option value="inherit">Padrão do pacote</option>
-                    <option value="both">Emoji e figurinha</option>
-                    <option value="emoticon">Só emoji</option>
-                    <option value="sticker">Só figurinha</option>
-                  </select>
+                  />
                   <button
                     className="pack-remove"
                     title="Remover"

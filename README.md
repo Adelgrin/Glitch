@@ -46,6 +46,7 @@ Canais de servidores privados usam a regra de entrada `restricted`, então quem 
 - Em **Cores personalizadas › Plano de fundo e transparência**: imagem atrás de toda a interface com **posicionamento antes de aplicar** (arrastar, zoom, girar), transparência dos painéis, brilho, vinheta e desfoque, com prévia ao vivo.
 - Plano de fundo próprio para o chat, com escurecer e desfoque.
 - **Perfil** (em Minha conta): clique no banner para enviar uma imagem (posicionável) ou escolher uma cor; logo abaixo fica a cor do seu bloco nas chamadas. Fica na account data e, quando o servidor suporta perfis estendidos (MSC4133, como o matrix.org), no seu perfil — assim outros usuários do MatrixCord veem. A cor da chamada também vai no estado da chamada.
+- Clicar numa pessoa (lista de membros, mensagem, voz, chamada) abre um cartão ao lado dela, como no Cinny: mensagem, mencionar, compartilhar, copiar ID, coisas em comum, cargo (aplicado no servidor e nos canais), volume na chamada, expulsar, banir e ignorar.
 - Em mensagens diretas entre duas pessoas, o painel da direita mostra o perfil da outra pessoa (banner, foto, status, verificação, servidores em comum) no lugar da lista de membros.
 - Avatar, ícone e banner do servidor também passam pelo editor de posicionamento. GIFs podem ser usados sem recorte para manter a animação.
 - CSS personalizado e exportar/importar tema em JSON.

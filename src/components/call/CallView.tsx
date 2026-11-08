@@ -3,7 +3,7 @@ import type { Room } from "matrix-js-sdk";
 import type { Track } from "livekit-client";
 import { getClient } from "../../matrix/client";
 import { useSettings } from "../../store/settings";
-import { useAppStore } from "../../store/app";
+import { anchorOf, useAppStore } from "../../store/app";
 import {
   joinVoice,
   leaveVoice,
@@ -312,7 +312,7 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
           </button>
         )}
         {!p.isLocal && (
-          <button className="icon-btn tiny" title="Perfil" onClick={() => openModal({ type: "userProfile", userId: p.userId, roomId: room.roomId })}>
+          <button className="icon-btn tiny" title="Perfil" onClick={(e) => openModal({ type: "userProfile", userId: p.userId, roomId: room.roomId, anchor: anchorOf(e.currentTarget) })}>
             <IconChevronDown size={16} />
           </button>
         )}

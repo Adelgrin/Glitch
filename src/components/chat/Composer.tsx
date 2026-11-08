@@ -108,6 +108,15 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
     });
   };
 
+  // "Mencionar" no cartão de perfil insere aqui
+  const insertRef = useRef(insertText);
+  insertRef.current = insertText;
+  useEffect(() => {
+    const h = (e: Event) => insertRef.current(String((e as CustomEvent<string>).detail ?? ""));
+    window.addEventListener("mc:composer-insert", h);
+    return () => window.removeEventListener("mc:composer-insert", h);
+  }, []);
+
   const typing = (v: string) => {
     const now = Date.now();
     if (v && now - lastTyping.current > 3000) {

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { KnownMembership, type Room, type RoomMember } from "matrix-js-sdk";
 import { getClient } from "../matrix/client";
-import { useAppStore, useVersion } from "../store/app";
+import { anchorOf, useAppStore, useVersion } from "../store/app";
 import Avatar from "./Avatar";
 
 type Presence = "online" | "unavailable" | "offline";
@@ -53,7 +53,9 @@ export default function MemberList({ room, spaceId }: { room: Room; spaceId: str
               <div
                 key={m.userId}
                 className={`member ${anyPresence && (!p || p === "offline") ? "offline" : ""}`}
-                onClick={() => openModal({ type: "userProfile", userId: m.userId, roomId: source.roomId })}
+                onClick={(e) =>
+                  openModal({ type: "userProfile", userId: m.userId, roomId: source.roomId, anchor: anchorOf(e.currentTarget) })
+                }
               >
                 <Avatar mxc={m.getMxcAvatarUrl()} name={m.name} id={m.userId} size={32} status={anyPresence ? (p ?? "offline") : null} />
                 <div className="member-names">
