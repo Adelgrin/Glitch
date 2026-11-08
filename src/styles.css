@@ -15,7 +15,12 @@
   --active: rgba(255, 255, 255, 0.1);
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(0, 0, 0, 0.25);
-  --radius: 8px;
+  --radius: 12px;
+  /* derivados: botões/campos e painéis grandes */
+  --radius-sm: calc(var(--radius) * 0.65);
+  --radius-lg: calc(var(--radius) * 1.35);
+  /* espaço entre os painéis flutuantes */
+  --gap: 8px;
   --avatar-radius: 50%;
   --font: "gg sans", "Segoe UI", system-ui, sans-serif;
   --sidebar-w: 240px;
@@ -28,7 +33,8 @@
   --mod-color: #3ba55d;
   --chat-dim: 0.5;
   --chat-blur: 0px;
-  --app-dim: 0.6;
+  --app-brightness: 0.6;
+  --app-vignette: 0.35;
   --app-blur: 0px;
   --panel-bg1: color-mix(in srgb, var(--bg1) calc(var(--panel-opacity) * 100%), transparent);
   --panel-bg2: color-mix(in srgb, var(--bg2) calc(var(--panel-opacity) * 100%), transparent);
@@ -162,7 +168,7 @@ code {
   justify-content: center;
   gap: 6px;
   border: none;
-  border-radius: calc(var(--radius) * 0.5 + 1px);
+  border-radius: var(--radius-sm);
   padding: 8px 16px;
   font-weight: 500;
   cursor: pointer;
@@ -229,7 +235,7 @@ code {
   border: none;
   color: var(--muted);
   padding: 6px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -409,8 +415,8 @@ select,
 textarea {
   background: var(--input);
   border: 1px solid transparent;
-  border-radius: calc(var(--radius) * 0.5);
-  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
   outline: none;
   min-width: 0;
 }
@@ -445,7 +451,7 @@ input[type="checkbox"] {
   font-size: 0.875rem;
   background: rgba(242, 63, 67, 0.1);
   padding: 8px 10px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
 }
 .notice {
   background: rgba(var(--accent-rgb), 0.15);
@@ -460,11 +466,16 @@ input[type="checkbox"] {
 }
 
 /* ---------- layout principal ---------- */
+/* Painéis "flutuantes": cada coluna é um cartão arredondado sobre o fundo */
 .app {
   display: flex;
   height: 100%;
   position: relative;
   isolation: isolate;
+  padding: var(--gap) var(--gap) var(--gap) 0;
+  gap: var(--gap);
+  background: var(--bg3);
+  overflow: hidden;
 }
 .app-bg {
   position: absolute;
@@ -472,13 +483,16 @@ input[type="checkbox"] {
   z-index: -1;
   background-size: cover;
   background-position: center;
-  filter: blur(var(--app-blur));
+  filter: blur(var(--app-blur)) brightness(var(--app-brightness));
   transform: scale(1.04);
 }
-.app-bg-dim {
+.app-vignette {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, var(--app-dim));
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, var(--app-vignette)) 100%);
+  box-shadow: inset 0 0 160px rgba(0, 0, 0, calc(var(--app-vignette) * 0.8));
 }
 .main {
   flex: 1;
@@ -486,6 +500,8 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   background: var(--panel-bg1);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 .empty-main {
   flex: 1;
@@ -506,11 +522,11 @@ input[type="checkbox"] {
 .server-rail {
   width: 72px;
   flex-shrink: 0;
-  background: var(--panel-bg3);
+  background: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 0;
+  padding: 4px 0;
   gap: 8px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -604,7 +620,7 @@ input[type="checkbox"] {
   background: var(--floating);
   color: var(--text);
   padding: 8px 12px;
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: var(--radius-sm);
   font-weight: 600;
   font-size: 0.95rem;
   white-space: nowrap;
@@ -629,14 +645,16 @@ input[type="checkbox"] {
   flex-direction: column;
   position: relative;
   min-height: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 .sidebar-header {
-  height: 48px;
+  height: 52px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   padding: 0 10px;
-  box-shadow: 0 1px 0 var(--border), 0 2px 2px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--border);
   z-index: 2;
 }
 .server-header {
@@ -650,7 +668,7 @@ input[type="checkbox"] {
   background: var(--hover);
 }
 .server-header-row {
-  height: 48px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -715,7 +733,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   color: var(--muted);
   cursor: pointer;
   margin: 1px 0;
@@ -796,7 +814,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 8px;
   padding: 3px 8px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: 0.875rem;
   cursor: pointer;
@@ -846,7 +864,7 @@ input[type="checkbox"] {
   padding: 8px 10px;
   background: none;
   border: none;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--muted);
   font-size: 0.875rem;
@@ -872,9 +890,10 @@ input[type="checkbox"] {
 
 /* painel de voz + usuário */
 .voice-panel {
-  border-top: 1px solid var(--border);
-  padding: 8px;
-  background: var(--panel-bg2);
+  margin: 8px 8px 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg3) calc(var(--panel-opacity) * 60%), transparent);
 }
 .voice-panel-top {
   display: flex;
@@ -919,7 +938,9 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 8px;
+  margin: 8px;
+  padding: 6px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg3) calc(var(--panel-opacity) * 60%), transparent);
 }
 .user-panel-info {
@@ -929,7 +950,7 @@ input[type="checkbox"] {
   gap: 8px;
   min-width: 0;
   padding: 2px 4px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .user-panel-info:hover {
@@ -953,13 +974,13 @@ input[type="checkbox"] {
   min-width: 0;
 }
 .chat-header {
-  height: 48px;
+  height: 52px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px 0 16px;
-  box-shadow: 0 1px 0 var(--border), 0 2px 2px rgba(0, 0, 0, 0.08);
+  padding: 0 12px 0 18px;
+  border-bottom: 1px solid var(--border);
   z-index: 2;
 }
 .chat-title {
@@ -1046,9 +1067,10 @@ input[type="checkbox"] {
 }
 .message {
   position: relative;
-  padding: 2px 48px 2px 16px;
-  margin-top: 16px;
+  padding: 2px 40px 2px 8px;
+  margin: 16px 8px 0;
   line-height: 1.375;
+  border-radius: var(--radius-sm);
 }
 :root[data-density="compact"] .message {
   margin-top: 6px;
@@ -1155,7 +1177,7 @@ input[type="checkbox"] {
 .code-block {
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
   margin: 4px 0;
   overflow-x: auto;
@@ -1210,7 +1232,7 @@ input[type="checkbox"] {
   background: var(--panel-bg2);
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: var(--radius-sm);
   padding: 2px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   z-index: 5;
@@ -1231,7 +1253,7 @@ input[type="checkbox"] {
   gap: 6px;
   background: var(--bg2);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 2px 8px;
   cursor: pointer;
   font-size: 0.9rem;
@@ -1250,7 +1272,7 @@ input[type="checkbox"] {
 .media-image {
   margin-top: 4px;
   max-width: 100%;
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   cursor: zoom-in;
   background: var(--input);
@@ -1264,7 +1286,7 @@ input[type="checkbox"] {
 .media-video {
   max-width: min(480px, 100%);
   max-height: 360px;
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: var(--radius-sm);
   margin-top: 4px;
 }
 .media-loading {
@@ -1309,7 +1331,7 @@ input[type="checkbox"] {
 .lightbox img {
   max-width: 90vw;
   max-height: 85vh;
-  border-radius: 4px;
+  border-radius: var(--radius);
 }
 .lightbox-open {
   color: #fff;
@@ -1336,8 +1358,8 @@ input[type="checkbox"] {
   display: flex;
   align-items: flex-start;
   background: color-mix(in srgb, var(--text) 7%, var(--bg1));
-  border-radius: var(--radius);
-  padding: 0 6px;
+  border-radius: var(--radius-lg);
+  padding: 0 8px;
 }
 .composer.attached {
   border-top-left-radius: 0;
@@ -1461,14 +1483,15 @@ input[type="checkbox"] {
   flex-shrink: 0;
   background: var(--panel-bg2);
   overflow-y: auto;
-  padding: 0 8px 16px;
+  padding: 4px 8px 16px;
+  border-radius: var(--radius-lg);
 }
 .member {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 6px 8px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .member:hover {
@@ -1650,7 +1673,7 @@ input[type="checkbox"] {
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
   padding: 3px 8px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
   max-width: calc(100% - 16px);
 }
@@ -1803,7 +1826,7 @@ input[type="checkbox"] {
 .seg {
   display: inline-flex;
   background: var(--input);
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: var(--radius-sm);
   padding: 3px;
   gap: 2px;
   flex-wrap: wrap;
@@ -1812,7 +1835,7 @@ input[type="checkbox"] {
   background: none;
   border: none;
   padding: 5px 12px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--muted);
   font-size: 0.85rem;
@@ -1841,7 +1864,7 @@ input[type="checkbox"] {
 }
 .modal {
   background: var(--bg1);
-  border-radius: calc(var(--radius) * 1.2);
+  border-radius: var(--radius-lg);
   width: 100%;
   max-width: 460px;
   max-height: calc(100vh - 32px);
@@ -2019,19 +2042,23 @@ input[type="checkbox"] {
   inset: 0;
   z-index: 140;
   display: flex;
-  background: var(--bg1);
+  gap: var(--gap);
+  padding: var(--gap);
+  background: var(--bg3);
   animation: fade 0.15s;
 }
 .settings-nav {
-  flex: 1 0 220px;
+  flex: 0 1 300px;
+  min-width: 200px;
   background: var(--bg2);
+  border-radius: var(--radius-lg);
   display: flex;
   justify-content: flex-end;
   overflow-y: auto;
 }
 .settings-nav-inner {
-  width: 220px;
-  padding: 60px 8px 20px 20px;
+  width: 240px;
+  padding: 28px 12px 20px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2040,49 +2067,69 @@ input[type="checkbox"] {
   text-align: left;
   background: none;
   border: none;
-  padding: 7px 10px;
-  border-radius: calc(var(--radius) * 0.5);
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--muted);
   font-weight: 500;
+  transition: background 0.12s, color 0.12s;
 }
 .settings-nav button:hover {
   background: var(--hover);
   color: var(--text);
 }
 .settings-nav button.active {
-  background: var(--active);
+  background: rgba(var(--accent-rgb), 0.16);
   color: var(--text);
 }
 .settings-nav .section-label {
-  padding: 12px 10px 4px;
+  padding: 14px 12px 6px;
+}
+.settings-nav .dropdown-sep {
+  margin: 10px 8px;
 }
 .settings-content {
   flex: 1 1 800px;
   overflow-y: auto;
   display: flex;
   position: relative;
+  background: var(--bg1);
+  border-radius: var(--radius-lg);
 }
 .settings-content-inner {
-  max-width: 740px;
+  max-width: 760px;
   width: 100%;
-  padding: 60px 40px 80px;
+  padding: 32px 40px 80px;
 }
 .settings-content h2 {
   margin: 0 0 20px;
-  font-size: 1.25rem;
+  font-size: 1.35rem;
 }
 .settings-content h3 {
-  margin: 28px 0 8px;
+  margin: 32px 0 10px;
   font-size: 0.8rem;
   text-transform: uppercase;
   color: var(--muted);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+}
+/* bloco agrupado dentro das configurações */
+.settings-card {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin: 16px 0;
+}
+.settings-card-title {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.settings-card > p:first-of-type {
+  margin-top: 4px;
 }
 .settings-close {
   position: sticky;
-  top: 60px;
-  margin: 60px 20px 0 0;
+  top: 28px;
+  margin: 28px 20px 0 0;
   height: fit-content;
   background: none;
   border: none;
@@ -2289,7 +2336,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
 }
 .member-row:hover {
   background: var(--hover);
@@ -2309,7 +2356,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .user-result:hover {
@@ -2595,7 +2642,7 @@ input[type="checkbox"] {
   gap: 8px;
   padding: 6px 10px;
   background: var(--bg2);
-  border-radius: calc(var(--radius) * 0.6);
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
 }
 .perm-group {
@@ -2606,7 +2653,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 12px;
   padding: 6px 8px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
 }
 .perm-row:hover {
@@ -2628,7 +2675,124 @@ input[type="checkbox"] {
   font-weight: 600;
   color: var(--admin-color);
   padding: 4px 10px;
-  border-radius: calc(var(--radius) * 0.5);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--admin-color) 15%, transparent);
   cursor: help;
+}
+
+/* ---------- editor de plano de fundo (Aparência) ---------- */
+.bg-editor {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  margin: 12px 0 4px;
+}
+.bg-editor .image-field {
+  margin-bottom: 4px;
+}
+.bg-preview {
+  position: relative;
+  width: 240px;
+  aspect-ratio: 16 / 10;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg3);
+  isolation: isolate;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.bg-preview-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(calc(var(--app-blur) / 4)) brightness(var(--app-brightness));
+  transform: scale(1.04);
+}
+.bg-preview-img.empty {
+  filter: none;
+  background: var(--bg3);
+}
+.bg-preview-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, var(--app-vignette)) 100%);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, calc(var(--app-vignette) * 0.8));
+}
+.bg-preview-ui {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 4px;
+  padding: 5px 5px 5px 0;
+}
+.bg-preview-rail {
+  width: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 2px;
+}
+.bg-preview-rail i {
+  width: 12px;
+  height: 12px;
+  border-radius: 40%;
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+}
+.bg-preview-rail i:first-child {
+  background: var(--accent);
+}
+.bg-preview-panel {
+  border-radius: var(--radius-sm);
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.bg-preview-panel.side {
+  width: 56px;
+  background: var(--panel-bg2);
+}
+.bg-preview-panel.main {
+  flex: 1;
+  background: var(--panel-bg1);
+}
+.bg-preview-panel b {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 25%, transparent);
+}
+.bg-preview-panel b.short {
+  width: 60%;
+}
+.bg-preview-input {
+  margin-top: auto;
+  height: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.disabled-block {
+  opacity: 0.45;
+  pointer-events: none;
+}
+@media (max-width: 720px) {
+  .bg-editor {
+    flex-direction: column;
+  }
+  .bg-preview {
+    width: 100%;
+  }
+  .settings-page {
+    flex-direction: column;
+  }
+  .settings-nav {
+    flex: 0 0 auto;
+    max-height: 40vh;
+  }
+  .settings-nav-inner {
+    width: 100%;
+    padding: 12px;
+  }
 }

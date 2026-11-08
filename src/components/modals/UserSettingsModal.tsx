@@ -274,6 +274,39 @@ const COLOR_LABELS: [keyof ThemeColors, string][] = [
   ["muted", "Texto secundário"],
 ];
 
+/** Miniatura do app mostrando fundo, brilho, vinheta e transparência ao vivo. */
+function BackgroundPreview() {
+  const a = useSettings((s) => s.appearance);
+  const bg = a.appBackground;
+  return (
+    <div className="bg-preview">
+      {bg.image ? (
+        <div className="bg-preview-img" style={{ backgroundImage: `url(${bg.image})` }} />
+      ) : (
+        <div className="bg-preview-img empty" />
+      )}
+      {bg.image && bg.vignette > 0 && <div className="bg-preview-vignette" />}
+      <div className="bg-preview-ui">
+        <div className="bg-preview-rail">
+          <i />
+          <i />
+          <i />
+        </div>
+        <div className="bg-preview-panel side">
+          <b />
+          <b />
+          <b />
+        </div>
+        <div className="bg-preview-panel main">
+          <b />
+          <b className="short" />
+          <span className="bg-preview-input" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function chatAspect(a: AppearanceSettings) {
   const w = window.innerWidth - 72 - a.sidebarWidth - (a.showMemberList ? a.memberListWidth : 0);
   const h = window.innerHeight - 48 - 70;
@@ -290,13 +323,16 @@ function Appearance() {
 
   const exportTheme = () => {
     const { customCss, accent, colors, radius, fontScale, chatFont, density, avatarShape, panelOpacity } = a;
-    const json = JSON.stringify({ accent, colors, radius, fontScale, chatFont, density, avatarShape, panelOpacity, customCss });
+    // A imagem fica de fora (seria grande demais); os ajustes do fundo vão junto
+    const appBackground = { ...a.appBackground, image: null };
+    const json = JSON.stringify({ accent, colors, radius, fontScale, chatFont, density, avatarShape, panelOpacity, appBackground, customCss });
     void navigator.clipboard.writeText(json);
     alert("Tema copiado para a área de transferência!");
   };
   const importTheme = () => {
     try {
       const p = JSON.parse(importText);
+      if (p.appBackground) p.appBackground = { ...a.appBackground, ...p.appBackground, image: a.appBackground.image };
       set({ ...p, theme: "custom" });
       setImportText("");
     } catch {
@@ -347,6 +383,70 @@ function Appearance() {
         ))}
       </div>
 
+      <div className="settings-card">
+        <div className="settings-card-title">Plano de fundo e transparência</div>
+        <p className="muted small">
+          Uma imagem atrás de toda a interface. Posicione-a antes de aplicar e ajuste a transparência dos painéis para
+          ela aparecer.
+        </p>
+        <div className="bg-editor">
+          <BackgroundPreview />
+          <div className="grow">
+            <ImageField
+              preview={a.appBackground.image}
+              aspect={window.innerWidth / window.innerHeight}
+              shape="rect"
+              outputWidth={1920}
+              mime="image/jpeg"
+              hidePreview
+              label="Imagem de fundo"
+              onResult={(r) =>
+                set({ appBackground: { ...a.appBackground, image: r.dataUrl }, panelOpacity: Math.min(a.panelOpacity, 0.8) })
+              }
+              onRemove={() => set({ appBackground: { ...a.appBackground, image: null }, panelOpacity: 1 })}
+            />
+            <Slider
+              label="Transparência dos painéis"
+              value={Math.round((1 - a.panelOpacity) * 100)}
+              min={0}
+              max={70}
+              step={5}
+              format={(v) => `${v}%`}
+              onChange={(v) => set({ panelOpacity: 1 - v / 100 })}
+            />
+          </div>
+        </div>
+        <div className={`two-col ${a.appBackground.image ? "" : "disabled-block"}`}>
+          <Slider
+            label="Brilho"
+            value={a.appBackground.brightness}
+            min={0.2}
+            max={1.5}
+            step={0.05}
+            format={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => set({ appBackground: { ...a.appBackground, brightness: v } })}
+          />
+          <Slider
+            label="Vinheta"
+            value={a.appBackground.vignette}
+            min={0}
+            max={1}
+            step={0.05}
+            format={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => set({ appBackground: { ...a.appBackground, vignette: v } })}
+          />
+          <Slider
+            label="Desfoque"
+            value={a.appBackground.blur}
+            min={0}
+            max={30}
+            format={(v) => `${v}px`}
+            onChange={(v) => set({ appBackground: { ...a.appBackground, blur: v } })}
+          />
+        </div>
+        {!a.appBackground.image && <p className="muted tiny">Brilho, vinheta e desfoque valem quando houver uma imagem de fundo.</p>}
+      </div>
+
       <h3>Texto e mensagens</h3>
       <div className="two-col">
         <label className="field">
@@ -378,7 +478,7 @@ function Appearance() {
         onChange={(v) => set({ avatarShape: v })}
       />
       <div className="two-col">
-        <Slider label="Arredondamento dos cantos" value={a.radius} min={0} max={20} format={(v) => `${v}px`} onChange={(v) => set({ radius: v })} />
+        <Slider label="Arredondamento dos cantos" value={a.radius} min={0} max={24} format={(v) => `${v}px`} onChange={(v) => set({ radius: v })} />
         <Slider label="Largura da lista de canais" value={a.sidebarWidth} min={200} max={380} format={(v) => `${v}px`} onChange={(v) => set({ sidebarWidth: v })} />
         <Slider label="Largura da lista de membros" value={a.memberListWidth} min={200} max={340} format={(v) => `${v}px`} onChange={(v) => set({ memberListWidth: v })} />
       </div>
@@ -404,27 +504,6 @@ function Appearance() {
         <div className="two-col">
           <Slider label="Escurecer" value={a.chatBackground.dim} min={0} max={0.95} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ chatBackground: { ...a.chatBackground, dim: v } })} />
           <Slider label="Desfoque" value={a.chatBackground.blur} min={0} max={20} format={(v) => `${v}px`} onChange={(v) => set({ chatBackground: { ...a.chatBackground, blur: v } })} />
-        </div>
-      )}
-
-      <h3>Plano de fundo do aplicativo</h3>
-      <p className="muted small">Fica atrás de toda a interface; ajuste a opacidade dos painéis para vê-lo.</p>
-      <ImageField
-        preview={a.appBackground.image}
-        aspect={window.innerWidth / window.innerHeight}
-        shape="rect"
-        outputWidth={1920}
-        mime="image/jpeg"
-        boxWidth={280}
-        label="Imagem do app"
-        onResult={(r) => set({ appBackground: { ...a.appBackground, image: r.dataUrl }, panelOpacity: Math.min(a.panelOpacity, 0.85) })}
-        onRemove={() => set({ appBackground: { ...a.appBackground, image: null }, panelOpacity: 1 })}
-      />
-      {a.appBackground.image && (
-        <div className="two-col">
-          <Slider label="Opacidade dos painéis" value={a.panelOpacity} min={0.3} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ panelOpacity: v })} />
-          <Slider label="Escurecer" value={a.appBackground.dim} min={0} max={0.95} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ appBackground: { ...a.appBackground, dim: v } })} />
-          <Slider label="Desfoque" value={a.appBackground.blur} min={0} max={30} format={(v) => `${v}px`} onChange={(v) => set({ appBackground: { ...a.appBackground, blur: v } })} />
         </div>
       )}
 

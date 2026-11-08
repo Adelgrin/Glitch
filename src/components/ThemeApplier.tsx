@@ -55,7 +55,8 @@ export default function ThemeApplier() {
     set("--avatar-radius", a.avatarShape === "circle" ? "50%" : a.avatarShape === "rounded" ? "30%" : "6px");
     set("--chat-dim", String(a.chatBackground.dim));
     set("--chat-blur", `${a.chatBackground.blur}px`);
-    set("--app-dim", String(a.appBackground.dim));
+    set("--app-brightness", String(a.appBackground.brightness));
+    set("--app-vignette", String(a.appBackground.vignette));
     set("--app-blur", `${a.appBackground.blur}px`);
     root.style.fontSize = `${16 * a.fontScale}px`;
     root.dataset.density = a.density;

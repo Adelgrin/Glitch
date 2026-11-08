@@ -42,7 +42,9 @@ Canais de servidores privados usam a regra de entrada `restricted`, então quem 
 ## Personalização
 
 - 7 temas prontos + todas as cores editáveis, cor de destaque, fonte, tamanho do texto, densidade, cantos, formato dos avatares, larguras das colunas, animações, formato da hora.
-- Planos de fundo do chat e do app com **posicionamento antes de aplicar** (arrastar, zoom, girar), escurecer e desfoque.
+- Visual "clean" com painéis flutuantes de cantos arredondados (o arredondamento é configurável).
+- Em **Cores personalizadas › Plano de fundo e transparência**: imagem atrás de toda a interface com **posicionamento antes de aplicar** (arrastar, zoom, girar), transparência dos painéis, brilho, vinheta e desfoque, com prévia ao vivo.
+- Plano de fundo próprio para o chat, com escurecer e desfoque.
 - Avatar, ícone e banner do servidor também passam pelo editor de posicionamento. GIFs podem ser usados sem recorte para manter a animação.
 - CSS personalizado e exportar/importar tema em JSON.
 

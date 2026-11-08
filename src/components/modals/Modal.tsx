@@ -51,6 +51,7 @@ export function ImageField({
   onRemove,
   boxWidth = 96,
   placeholder,
+  hidePreview,
 }: {
   preview?: string | null;
   aspect: number;
@@ -62,6 +63,8 @@ export function ImageField({
   onRemove?: () => void;
   boxWidth?: number;
   placeholder?: ReactNode;
+  /** não mostra a miniatura (quando a tela já tem uma prévia própria) */
+  hidePreview?: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,15 +74,17 @@ export function ImageField({
   };
   return (
     <div className="image-field">
-      <div
-        className={`image-field-box ${shape}`}
-        style={{ width: Math.min(boxWidth, 180 * aspect), height: Math.min(boxWidth, 180 * aspect) / aspect }}
-        onClick={choose}
-        title="Escolher imagem"
-      >
-        {preview ? <img src={preview} alt="" /> : placeholder ?? <IconImage size={28} />}
-        <div className="image-field-hover">{busy ? "Enviando…" : "Alterar"}</div>
-      </div>
+      {!hidePreview && (
+        <div
+          className={`image-field-box ${shape}`}
+          style={{ width: Math.min(boxWidth, 180 * aspect), height: Math.min(boxWidth, 180 * aspect) / aspect }}
+          onClick={choose}
+          title="Escolher imagem"
+        >
+          {preview ? <img src={preview} alt="" /> : placeholder ?? <IconImage size={28} />}
+          <div className="image-field-hover">{busy ? "Enviando…" : "Alterar"}</div>
+        </div>
+      )}
       <div className="image-field-side">
         <div className="field-label">{label}</div>
         <div className="row gap">

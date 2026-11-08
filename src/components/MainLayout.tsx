@@ -29,11 +29,8 @@ export default function MainLayout() {
 
   return (
     <div className={`app ${appBg.image ? "has-app-bg" : ""}`}>
-      {appBg.image && (
-        <div className="app-bg" style={{ backgroundImage: `url(${appBg.image})` }}>
-          <div className="app-bg-dim" />
-        </div>
-      )}
+      {appBg.image && <div className="app-bg" style={{ backgroundImage: `url(${appBg.image})` }} />}
+      {appBg.image && appBg.vignette > 0 && <div className="app-vignette" />}
       <ServerRail />
       <ChannelSidebar />
       <main className="main">

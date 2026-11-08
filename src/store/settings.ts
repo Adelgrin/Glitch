@@ -59,6 +59,16 @@ export interface BackgroundImage {
   blur: number;
 }
 
+export interface AppBackground {
+  /** data URL da imagem já recortada/posicionada */
+  image: string | null;
+  /** brilho da imagem (0.2 = bem escura, 1 = original, 1.5 = mais clara) */
+  brightness: number;
+  /** escurecimento das bordas (0–1) */
+  vignette: number;
+  blur: number;
+}
+
 export interface AppearanceSettings {
   theme: string; // chave de THEME_PRESETS ou "custom"
   accent: string;
@@ -72,7 +82,8 @@ export interface AppearanceSettings {
   memberListWidth: number;
   showMemberList: boolean;
   chatBackground: BackgroundImage;
-  appBackground: BackgroundImage;
+  appBackground: AppBackground;
+  /** opacidade dos painéis (1 = opaco; transparência = 1 - opacidade) */
   panelOpacity: number;
   timeFormat: "24h" | "12h";
   showSeconds: boolean;
@@ -121,13 +132,13 @@ const defaultAppearance: AppearanceSettings = {
   fontScale: 1,
   chatFont: "system",
   density: "cozy",
-  radius: 8,
+  radius: 12,
   avatarShape: "circle",
   sidebarWidth: 240,
   memberListWidth: 240,
   showMemberList: true,
   chatBackground: { image: null, dim: 0.55, blur: 0 },
-  appBackground: { image: null, dim: 0.6, blur: 0 },
+  appBackground: { image: null, brightness: 0.6, vignette: 0.35, blur: 0 },
   panelOpacity: 1,
   timeFormat: "24h",
   showSeconds: false,
@@ -171,12 +182,33 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: "mc.settings",
-      version: 1,
+      version: 2,
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as { appearance?: Record<string, unknown> };
+        if (version < 2 && p.appearance) {
+          // v2: visual mais arredondado (8px era o padrão antigo) e fundo com brilho/vinheta
+          if (p.appearance.radius === 8) p.appearance.radius = 12;
+          const old = p.appearance.appBackground as { image?: string | null; dim?: number; blur?: number } | undefined;
+          if (old && !("brightness" in old)) {
+            p.appearance.appBackground = {
+              image: old.image ?? null,
+              brightness: 1 - (old.dim ?? 0.4),
+              vignette: 0.35,
+              blur: old.blur ?? 0,
+            };
+          }
+        }
+        return p as unknown as SettingsState;
+      },
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<SettingsState>;
         return {
           ...current,
-          appearance: { ...defaultAppearance, ...p.appearance },
+          appearance: {
+            ...defaultAppearance,
+            ...p.appearance,
+            appBackground: { ...defaultAppearance.appBackground, ...p.appearance?.appBackground },
+          },
           voice: { ...defaultVoice, ...p.voice },
           advanced: { ...current.advanced, ...p.advanced },
         };
