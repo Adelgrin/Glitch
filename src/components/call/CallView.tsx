@@ -22,6 +22,7 @@ import {
   type VParticipant,
 } from "../../voice/voice";
 import { useRtcMembers } from "../../voice/useRtcMembers";
+import { useCallColor } from "../../matrix/profileStyle";
 import Avatar, { colorFor } from "../Avatar";
 import ChatView from "../chat/ChatView";
 import {
@@ -187,6 +188,7 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
   const [volOpen, setVolOpen] = useState(false);
   const member = room.getMember(p.userId);
   const name = member?.name ?? c.getUser(p.userId)?.displayName ?? p.userId;
+  const callColor = useCallColor(p.userId);
   const pub = kind === "screen" ? p.screen : p.camera;
   const hasVideo = !!pub && !pub.isMuted;
   const isWatching = p.isLocal || !!watching;
@@ -211,7 +213,7 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
     <div
       ref={ref}
       className={`tile ${kind} ${p.speaking && kind === "camera" ? "speaking" : ""} ${focused ? "focused" : ""} ${small ? "small" : ""}`}
-      style={{ ["--tile-color" as string]: colorFor(p.userId) }}
+      style={{ ["--tile-color" as string]: callColor ?? colorFor(p.userId) }}
       onDoubleClick={fullscreen}
       onClick={() => {
         if (small || (!focused && showVideo)) setFocused(key);
@@ -321,8 +323,9 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
 
 function GhostTile({ room, userId }: { room: Room; userId: string }) {
   const m = room.getMember(userId);
+  const callColor = useCallColor(userId);
   return (
-    <div className="tile camera ghost" style={{ ["--tile-color" as string]: colorFor(userId) }}>
+    <div className="tile camera ghost" style={{ ["--tile-color" as string]: callColor ?? colorFor(userId) }}>
       <div className="tile-avatar">
         <Avatar mxc={m?.getMxcAvatarUrl()} name={m?.name ?? userId} id={userId} size={88} />
       </div>

@@ -15,6 +15,7 @@ import { KnownMembership } from "matrix-js-sdk";
 import type { MatrixRTCSession, Transport, CallMembership } from "matrix-js-sdk/lib/matrixrtc";
 import { create } from "zustand";
 import { getClient } from "../matrix/client";
+import { getMyCallColor, useProfileStyles } from "../matrix/profileStyle";
 import { serverName } from "../matrix/rooms";
 import { useSettings } from "../store/settings";
 import { sounds } from "./sounds";
@@ -241,18 +242,34 @@ function applyAllSubscriptions() {
   for (const p of lk.remoteParticipants.values()) applySubscriptions(p);
 }
 
+/** Estado publicado na membership da chamada (visto por quem está fora dela também). */
+function voiceAppData() {
+  const s = useVoice.getState();
+  const color = getMyCallColor();
+  return {
+    [VOICE_STATE_KEY]: {
+      muted: s.muted,
+      deafened: s.deafened,
+      video: s.cameraOn,
+      streaming: s.screenOn,
+      ...(color ? { color } : {}),
+    },
+  };
+}
+
 function scheduleAppDataUpdate() {
   window.clearTimeout(appDataTimer);
   appDataTimer = window.setTimeout(() => {
     const s = useVoice.getState();
     if (!session || s.status !== "connected") return;
-    session
-      .updateApplicationData({
-        [VOICE_STATE_KEY]: { muted: s.muted, deafened: s.deafened, video: s.cameraOn, streaming: s.screenOn },
-      })
-      .catch((e) => console.warn("Falha ao atualizar estado de voz", e));
+    session.updateApplicationData(voiceAppData()).catch((e) => console.warn("Falha ao atualizar estado de voz", e));
   }, 700);
 }
+
+// Mudou a cor do bloco na chamada → republica para os outros verem
+useProfileStyles.subscribe((s, prev) => {
+  if (s.mine.callColor !== prev.mine.callColor) scheduleAppDataUpdate();
+});
 
 function ensureAudioHost() {
   if (!audioHost) {
@@ -358,9 +375,7 @@ export async function joinVoice(roomId: string) {
       {
         callIntent: "audio",
         manageMediaKeys: false,
-        applicationData: {
-          [VOICE_STATE_KEY]: { muted: useVoice.getState().muted, deafened: useVoice.getState().deafened, video: false, streaming: false },
-        },
+        applicationData: voiceAppData(),
       },
     );
 

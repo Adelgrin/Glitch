@@ -59,7 +59,7 @@ export function EscClose({ onClose }: { onClose(): void }) {
   // Fecha com Esc (ignorado enquanto o recortador estiver aberto, pois ele captura antes)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !document.querySelector(".cropper-modal, .verify-modal")) onClose();
+      if (e.key === "Escape" && !document.querySelector(".cropper-modal, .verify-modal, .banner-menu")) onClose();
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);

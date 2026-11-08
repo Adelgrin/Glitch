@@ -4,7 +4,8 @@ import { startDm } from "../../matrix/rooms";
 import { useAppStore } from "../../store/app";
 import { useSettings } from "../../store/settings";
 import { setUserVolume, useVoice } from "../../voice/voice";
-import Avatar, { colorFor } from "../Avatar";
+import Avatar from "../Avatar";
+import ProfileBanner from "../ProfileBanner";
 import { Modal } from "./Modal";
 
 function normalizeUserId(input: string) {
@@ -173,7 +174,7 @@ export function UserProfileModal({ onClose, userId, roomId }: { onClose(): void;
 
   return (
     <Modal onClose={onClose} className="profile-modal">
-      <div className="profile-banner" style={{ background: colorFor(userId) }} />
+      <ProfileBanner userId={userId} />
       <div className="profile-avatar">
         <Avatar mxc={avatar} name={name} id={userId} size={92} status={(presence as "online") ?? null} />
       </div>

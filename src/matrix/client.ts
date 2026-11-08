@@ -12,6 +12,7 @@ import {
 } from "matrix-js-sdk";
 import { useAppStore } from "../store/app";
 import { initVerification, refreshStatus, SAS_METHOD } from "./verification";
+import { initProfileStyle } from "./profileStyle";
 
 const SESSION_KEY = "mc.session";
 const PENDING_SSO_KEY = "mc.pendingSso";
@@ -204,6 +205,7 @@ export async function startClient(session: StoredSession): Promise<MatrixClient>
   await c.startClient({ initialSyncLimit: 30, lazyLoadMembers: true, threadSupport: false });
   await firstSync;
   void refreshStatus();
+  initProfileStyle();
   scheduleBump();
   return c;
 }

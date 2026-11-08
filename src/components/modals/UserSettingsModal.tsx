@@ -10,6 +10,7 @@ import { EscClose } from "./ServerSettingsModal";
 import { IconShieldAlert, IconShieldCheck, IconX } from "../icons";
 import { refreshStatus, startRestore, startSelfVerification, useVerification, verifyOtherDevice } from "../../matrix/verification";
 import { RestoreStatus } from "./VerificationModal";
+import { BannerEditor, CallColorEditor } from "./ProfileAppearance";
 
 type Tab = "account" | "security" | "appearance" | "voice" | "advanced";
 
@@ -86,7 +87,7 @@ function Account() {
     <>
       <h2>Minha conta</h2>
       <div className="account-card">
-        <div className="account-banner" />
+        <BannerEditor />
         <div className="account-row">
           <ImageField
             preview={avatarUrl}
@@ -126,6 +127,9 @@ function Account() {
         </div>
         {msg && <p className="small">{msg}</p>}
       </div>
+
+      <h3>Chamadas</h3>
+      <CallColorEditor />
     </>
   );
 }

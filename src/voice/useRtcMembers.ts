@@ -3,6 +3,7 @@ import { MatrixRTCSessionEvent } from "matrix-js-sdk/lib/matrixrtc";
 import type { Room } from "matrix-js-sdk";
 import { getClient } from "../matrix/client";
 import { VOICE_STATE_KEY } from "./voice";
+import { rememberStyle } from "../matrix/profileStyle";
 
 export interface RtcMember {
   userId: string;
@@ -11,6 +12,8 @@ export interface RtcMember {
   deafened: boolean;
   video: boolean;
   streaming: boolean;
+  /** cor escolhida pela pessoa para o bloco na chamada */
+  color?: string;
 }
 
 function read(room: Room): RtcMember[] {
@@ -22,6 +25,8 @@ function read(room: Room): RtcMember[] {
     if (seen.has(m.userId)) continue;
     seen.add(m.userId);
     const st = (m.applicationData?.[VOICE_STATE_KEY] ?? {}) as Partial<RtcMember>;
+    const color = typeof st.color === "string" && /^#[0-9a-f]{6}$/i.test(st.color) ? st.color : undefined;
+    if (color) rememberStyle(m.userId, { callColor: color });
     out.push({
       userId: m.userId,
       deviceId: m.deviceId,
@@ -29,6 +34,7 @@ function read(room: Room): RtcMember[] {
       deafened: !!st.deafened,
       video: !!st.video,
       streaming: !!st.streaming,
+      color,
     });
   }
   return out;
