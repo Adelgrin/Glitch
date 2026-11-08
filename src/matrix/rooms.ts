@@ -104,6 +104,25 @@ export function getDmPartner(room: Room): RoomMember | null {
   return members.length === 1 ? members[0] : (room.getAvatarFallbackMember() ?? null);
 }
 
+/**
+ * Se a sala é uma mensagem direta entre você e mais uma pessoa, devolve o ID dela.
+ * Grupos (3+ pessoas) e salas comuns devolvem null.
+ */
+export function oneToOnePartner(room: Room): string | null {
+  if (room.isSpaceRoom() || !getDirectRoomIds().has(room.roomId)) return null;
+  const me = getClient().getUserId();
+  const others = room
+    .getMembers()
+    .filter((m) => m.userId !== me && (m.membership === KnownMembership.Join || m.membership === KnownMembership.Invite));
+  if (others.length === 1) return others[0].userId;
+  // Membros ainda não carregados: usa o par registrado em m.direct
+  if (others.length === 0) {
+    const content = getClient().getAccountData(EventType.Direct)?.getContent() ?? {};
+    for (const [userId, list] of Object.entries(content)) if (Array.isArray(list) && list.includes(room.roomId)) return userId;
+  }
+  return null;
+}
+
 const VISIBLE_TYPES = new Set(["m.room.message", "m.room.encrypted", "m.sticker"]);
 
 /** Há mensagem de outra pessoa que ainda não lemos? */

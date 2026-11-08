@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { getClient } from "../matrix/client";
-import { isVoiceRoom } from "../matrix/rooms";
+import { isVoiceRoom, oneToOnePartner } from "../matrix/rooms";
+import UserInfoPanel from "./UserInfoPanel";
 import { useAppStore, useVersion } from "../store/app";
 import { useSettings } from "../store/settings";
 import ServerRail from "./ServerRail";
@@ -21,6 +22,7 @@ export default function MainLayout() {
   const c = getClient();
   const room = roomId ? c.getRoom(roomId) : null;
   const voice = isVoiceRoom(room);
+  const dmPartner = room ? oneToOnePartner(room) : null;
 
   // Se o espaço selecionado sumiu (saiu do servidor), volta ao início
   useEffect(() => {
@@ -44,7 +46,10 @@ export default function MainLayout() {
           <EmptyMain />
         )}
       </main>
-      {showMembers && room && !voice && <MemberList room={room} spaceId={spaceId} />}
+      {showMembers &&
+        room &&
+        !voice &&
+        (dmPartner ? <UserInfoPanel room={room} userId={dmPartner} /> : <MemberList room={room} spaceId={spaceId} />)}
       <ModalHost />
       <VerificationModal />
       <VerificationToast />

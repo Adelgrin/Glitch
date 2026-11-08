@@ -3481,3 +3481,159 @@ input[type="color"]::-moz-color-swatch {
   color: var(--green);
   font-weight: 600;
 }
+
+/* ---------- perfil na lateral das mensagens diretas ---------- */
+.member-list.user-info {
+  width: max(var(--members-w), 300px);
+  padding: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+}
+.user-info-banner {
+  height: 120px;
+  flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
+}
+.user-info-avatar {
+  margin: -44px 0 0 16px;
+  width: fit-content;
+  border: 6px solid var(--panel-bg2);
+  border: 6px solid var(--bg2);
+  border-radius: var(--avatar-radius);
+  background: var(--bg2);
+  position: relative;
+}
+.user-info-avatar .status-dot {
+  border-color: var(--bg2);
+}
+.user-info-card {
+  margin: 10px 12px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg3) calc(var(--panel-opacity) * 55%), transparent);
+}
+.user-info-avatar + .user-info-card {
+  margin-top: 8px;
+}
+.user-info-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  word-break: break-word;
+}
+.user-info-id {
+  display: block;
+  max-width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-info-id:hover {
+  color: var(--text);
+}
+.user-info-status {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  word-break: break-word;
+}
+.user-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+.user-info-row > span:last-child {
+  color: var(--text);
+}
+.user-info-row.ok {
+  color: var(--green);
+}
+.user-info-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+.user-info-dot.online {
+  background: var(--green);
+}
+.user-info-dot.unavailable {
+  background: var(--yellow);
+}
+.user-info-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.user-info-row + .user-info-label,
+.user-info-card > .user-info-label:first-child {
+  margin-top: 4px;
+}
+.user-info-value {
+  font-size: 0.875rem;
+  margin-top: 2px;
+  word-break: break-all;
+}
+.user-info-section {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.user-info-section:hover {
+  color: var(--text);
+}
+.user-info-servers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+.user-info-server {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.875rem;
+  min-width: 0;
+}
+.user-info-server:hover {
+  background: var(--hover);
+}
+.user-info-empty {
+  margin-top: 8px;
+}
+.user-info-full {
+  margin: 12px 12px 0;
+}

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { EventTimeline, EventType, RelationType, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { getClient } from "../../matrix/client";
-import { getDirectRoomIds, getDmPartner, isVoiceRoom } from "../../matrix/rooms";
+import { getDirectRoomIds, getDmPartner, isVoiceRoom, oneToOnePartner } from "../../matrix/rooms";
 import { useAppStore, useVersion } from "../../store/app";
 import { useSettings } from "../../store/settings";
 import { MessageItem } from "./MessageItem";
 import Composer from "./Composer";
 import { formatDay } from "./format";
-import { IconAt, IconHash, IconSettings, IconSpeaker, IconUsers, IconX } from "../icons";
+import { IconAt, IconHash, IconSettings, IconSpeaker, IconUserCircle, IconUsers, IconX } from "../icons";
 
 const SHOWN = new Set<string>([EventType.RoomMessage, EventType.RoomMessageEncrypted, EventType.Sticker, EventType.RoomMember]);
 const GROUP_MS = 7 * 60 * 1000;
@@ -51,6 +51,7 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
   const lastId = events[events.length - 1]?.getId();
   const isDm = getDirectRoomIds().has(room.roomId);
   const partner = isDm ? getDmPartner(room) : null;
+  const oneToOne = !!oneToOnePartner(room);
   const topic = room.currentState.getStateEvents(EventType.RoomTopic, "")?.getContent()?.topic as string | undefined;
   const myPl = room.getMember(me)?.powerLevel ?? 0;
   const redactPl = (room.currentState.getStateEvents(EventType.RoomPowerLevels, "")?.getContent()?.redact as number) ?? 50;
@@ -149,10 +150,18 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
         {showMembersToggle && (
           <button
             className={`icon-btn ${showMembers ? "active" : ""}`}
-            title={showMembers ? "Ocultar lista de membros" : "Mostrar lista de membros"}
+            title={
+              oneToOne
+                ? showMembers
+                  ? "Ocultar perfil do usuário"
+                  : "Mostrar perfil do usuário"
+                : showMembers
+                  ? "Ocultar lista de membros"
+                  : "Mostrar lista de membros"
+            }
             onClick={() => setAppearance({ showMemberList: !showMembers })}
           >
-            <IconUsers />
+            {oneToOne ? <IconUserCircle /> : <IconUsers />}
           </button>
         )}
         {onClose && (
