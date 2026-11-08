@@ -19,6 +19,27 @@ Abra http://localhost:5173 e entre com qualquer conta Matrix (ex.: `matrix.org`)
 - `npm run typecheck` — checa os tipos
 - `http://localhost:5173/?preview=appearance` — (só em dev) abre a tela de Aparência sem login, útil para mexer no visual
 
+## App para Windows (Electron)
+
+```bash
+npm run dist
+```
+
+Gera em `release/`:
+
+- `Glitch-Setup-<versão>.exe` — instalador (escolhe a pasta, cria atalhos na área de trabalho e no menu Iniciar)
+- `Glitch-<versão>-portable.exe` — executável único, sem instalação
+
+Outros comandos: `npm run app` (compila e abre o app), `npm run app:dev` (abre o Electron apontando para o `npm run dev`), `npm run dist:dir` (só a pasta `release/win-unpacked`, mais rápido para testar).
+
+Detalhes (em `electron/`):
+
+- O app é servido pelo protocolo próprio `app://glitch/` (contexto seguro): WASM da criptografia, IndexedDB, microfone e o retorno do login SSO funcionam como no navegador.
+- Compartilhamento de tela com seletor próprio (telas/janelas, com miniaturas) e opção de áudio do sistema.
+- Links abrem no navegador padrão; uma instância só; atalhos F5/Ctrl+R (recarregar), Ctrl+Shift+I (DevTools), Ctrl +/−/0 (zoom), F11 (tela cheia).
+- Os executáveis não são assinados, então o Windows SmartScreen avisa na primeira execução (“Mais informações › Executar assim mesmo”).
+- Os dados ficam em `%APPDATA%\Glitch` (é preciso entrar na conta uma vez no app, separado do navegador).
+
 ## Como o Discord vira Matrix
 
 | Discord              | Matrix                                                                 |
