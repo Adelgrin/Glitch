@@ -1,6 +1,10 @@
-# MatrixCord
+# Glitch
+
+<img src="public/icon-192.png" alt="Glitch" width="96" />
 
 Cliente web para o protocolo [Matrix](https://matrix.org) com cara e jeito de Discord.
+
+Os ícones ficam em `public/` (`favicon.png`, `icon-192.png`, `icon-512.png`, `icon-1024.png` para o futuro instalador, `apple-touch-icon.png`) e o `manifest.webmanifest` permite instalar o app pelo navegador. Os identificadores internos de eventos e configurações (`com.matrixcord.*`, `mc.*`) continuam com o nome antigo para não perder dados já salvos.
 
 ## Rodando
 
@@ -45,7 +49,7 @@ Canais de servidores privados usam a regra de entrada `restricted`, então quem 
 - Visual "clean" com painéis flutuantes de cantos arredondados (o arredondamento é configurável).
 - Em **Cores personalizadas › Plano de fundo e transparência**: imagem atrás de toda a interface com **posicionamento antes de aplicar** (arrastar, zoom, girar), transparência dos painéis, brilho, vinheta e desfoque, com prévia ao vivo.
 - Plano de fundo próprio para o chat, com escurecer e desfoque.
-- **Perfil** (em Minha conta): clique no banner para enviar uma imagem (posicionável) ou escolher uma cor; logo abaixo fica a cor do seu bloco nas chamadas. Fica na account data e, quando o servidor suporta perfis estendidos (MSC4133, como o matrix.org), no seu perfil — assim outros usuários do MatrixCord veem. A cor da chamada também vai no estado da chamada.
+- **Perfil** (em Minha conta): clique no banner para enviar uma imagem (posicionável) ou escolher uma cor; logo abaixo fica a cor do seu bloco nas chamadas. Fica na account data e, quando o servidor suporta perfis estendidos (MSC4133, como o matrix.org), no seu perfil — assim outros usuários do Glitch veem. A cor da chamada também vai no estado da chamada.
 - Clicar numa pessoa (lista de membros, mensagem, voz, chamada) abre um cartão ao lado dela, como no Cinny: mensagem, mencionar, compartilhar, copiar ID, coisas em comum, cargo (aplicado no servidor e nos canais), volume na chamada, expulsar, banir e ignorar.
 - Em mensagens diretas entre duas pessoas, o painel da direita mostra o perfil da outra pessoa (banner, foto, status, verificação, servidores em comum) no lugar da lista de membros.
 - Avatar, ícone e banner do servidor também passam pelo editor de posicionamento. GIFs podem ser usados sem recorte para manter a animação.
@@ -77,10 +81,10 @@ As configurações do servidor (espaço) ganharam as mesmas abas de cargos, segu
 
 Igual ao Element: numa sessão nova aparece o aviso **Verifique esta sessão** (também em **Configurações › Segurança**).
 
-1. O MatrixCord manda um pedido de verificação para os seus outros dispositivos.
-2. Você aceita no Element (ou em outro MatrixCord) e os dois mostram os mesmos 7 emojis.
+1. O Glitch manda um pedido de verificação para os seus outros dispositivos.
+2. Você aceita no Element (ou em outro Glitch) e os dois mostram os mesmos 7 emojis.
 3. Confirmando que combinam, esta sessão fica assinada pela sua identidade, e o outro dispositivo envia a chave do backup.
-4. O MatrixCord baixa o backup de chaves para que as mensagens criptografadas antigas possam ser lidas.
+4. O Glitch baixa o backup de chaves para que as mensagens criptografadas antigas possam ser lidas.
 
 Pedidos vindos de outros dispositivos também aparecem aqui, e uma sessão já verificada pode verificar as outras pela lista em **Segurança › Sessões**.
 

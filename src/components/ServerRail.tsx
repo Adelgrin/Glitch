@@ -4,7 +4,7 @@ import { getClient } from "../matrix/client";
 import { getChildEvents, getJoinedSpaces, getRoomsInAnySpace, setServerOrder } from "../matrix/rooms";
 import { useAppStore, useVersion } from "../store/app";
 import Avatar from "./Avatar";
-import { IconChat, IconCompass, IconPlus } from "./icons";
+import { IconCompass, IconPlus } from "./icons";
 
 function spaceUnread(space: Room): number {
   const c = getClient();
@@ -55,8 +55,8 @@ export default function ServerRail() {
         badge={homeUnread + invites.filter((r) => !r.isSpaceRoom()).length}
         onClick={() => selectSpace(null)}
       >
-        <div className="rail-home">
-          <IconChat size={24} />
+        <div className="rail-home logo">
+          <img src="/icon-192.png?v=2" alt="" draggable={false} />
         </div>
       </RailItem>
       <div className="rail-sep" />

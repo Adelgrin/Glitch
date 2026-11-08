@@ -16,7 +16,7 @@ import { initProfileStyle } from "./profileStyle";
 
 const SESSION_KEY = "mc.session";
 const PENDING_SSO_KEY = "mc.pendingSso";
-const DEVICE_NAME = "MatrixCord Web";
+const DEVICE_NAME = "Glitch Web";
 
 export interface StoredSession {
   baseUrl: string;

@@ -176,7 +176,7 @@ export default function VerificationModal() {
           req.isSelfVerification && !otherDevice ? (
             <>
               <p>
-                Abra o <strong>Element</strong> (ou o MatrixCord) em outro dispositivo onde você já está conectado e{" "}
+                Abra o <strong>Element</strong> (ou o Glitch) em outro dispositivo onde você já está conectado e{" "}
                 <strong>aceite o pedido de verificação</strong> que apareceu lá.
               </p>
               <p className="muted small">O pedido expira em alguns minutos.</p>

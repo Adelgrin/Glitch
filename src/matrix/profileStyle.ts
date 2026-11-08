@@ -5,7 +5,7 @@
  *  - account data `com.matrixcord.profile` (sempre; sincroniza entre os seus dispositivos)
  *  - perfil estendido MSC4133, quando o servidor suporta → os outros veem o seu banner
  *  - a cor da chamada também vai no estado da chamada (applicationData), então quem
- *    está na chamada com o MatrixCord vê a cor mesmo sem MSC4133.
+ *    está na chamada com o Glitch vê a cor mesmo sem MSC4133.
  */
 import { useEffect } from "react";
 import { create } from "zustand";

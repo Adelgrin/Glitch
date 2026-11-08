@@ -154,8 +154,8 @@ export function CallColorEditor() {
       </div>
       <p className="muted tiny">
         {extended === false
-          ? "Seu servidor não suporta perfis estendidos (MSC4133): o banner aparece só para você. A cor da chamada aparece para quem estiver na chamada com o MatrixCord."
-          : "Banner e cor ficam no seu perfil Matrix: quem usa o MatrixCord vê os dois."}
+          ? "Seu servidor não suporta perfis estendidos (MSC4133): o banner aparece só para você. A cor da chamada aparece para quem estiver na chamada com o Glitch."
+          : "Banner e cor ficam no seu perfil Matrix: quem usa o Glitch vê os dois."}
       </p>
       {error && <div className="form-error">{error}</div>}
     </>

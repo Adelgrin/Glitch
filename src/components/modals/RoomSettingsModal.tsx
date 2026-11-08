@@ -468,7 +468,7 @@ export function SecurityPanel({ room }: { room: Room }) {
           </label>
           {encrypted && isVoiceRoom(room) && (
             <p className="muted small">
-              Observação: a mídia das chamadas do MatrixCord ainda não é criptografada; só o chat de texto deste canal é.
+              Observação: a mídia das chamadas do Glitch ainda não é criptografada; só o chat de texto deste canal é.
             </p>
           )}
           <div className="divider" />
@@ -879,7 +879,7 @@ export function AdvancedPanel({ room, onClose }: { room: Room; onClose(): void }
   const upgrade = () => {
     if (
       !confirm(
-        `Atualizar a sala da versão ${current} para a ${target}?\n\nUma sala nova será criada no lugar desta, e a antiga ficará arquivada com um link para a nova. Os membros precisam entrar de novo (o Element e o MatrixCord oferecem isso automaticamente).`,
+        `Atualizar a sala da versão ${current} para a ${target}?\n\nUma sala nova será criada no lugar desta, e a antiga ficará arquivada com um link para a nova. Os membros precisam entrar de novo (o Element e o Glitch oferecem isso automaticamente).`,
       )
     )
       return;
