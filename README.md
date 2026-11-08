@@ -46,6 +46,18 @@ Canais de servidores privados usam a regra de entrada `restricted`, então quem 
 - Avatar, ícone e banner do servidor também passam pelo editor de posicionamento. GIFs podem ser usados sem recorte para manter a animação.
 - CSS personalizado e exportar/importar tema em JSON.
 
+## Configurações de sala
+
+Pela engrenagem do canal (ou no cabeçalho do chat, que vale também para DMs) abre uma página com:
+
+- **Geral:** ícone com editor de posicionamento, nome, tópico, endereços (principal e locais), sair ou remover do servidor.
+- **Segurança e privacidade:** criptografia de ponta a ponta (ativar é irreversível), quem pode entrar (privado, membros do servidor, pedir para entrar, público), publicar no diretório, visitantes, quem lê o histórico.
+- **Cargos e permissões:** pessoas com cargo (inclusive criadores das salas v12), dar cargo por ID, desbanir e o cargo mínimo para cada ação (enviar, reagir, convidar, @room, fixar, chamadas, expulsar, banir, apagar e cada configuração).
+- **Notificações:** padrão, todas, só menções ou desativado (as mesmas regras de push do Element).
+- **Avançado:** ID interno, versão da sala e atualização de versão.
+
+As configurações do servidor (espaço) ganharam as mesmas abas de cargos, segurança e avançado.
+
 ## Verificação de sessão (emojis)
 
 Igual ao Element: numa sessão nova aparece o aviso **Verifique esta sessão** (também em **Configurações › Segurança**).

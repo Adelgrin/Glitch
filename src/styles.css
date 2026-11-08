@@ -2563,3 +2563,72 @@ input[type="checkbox"] {
   background: rgba(var(--accent-rgb), 0.2);
   color: var(--accent);
 }
+
+/* ---------- configurações de sala ---------- */
+.radio-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.radio-title {
+  font-weight: 600;
+}
+.check.disabled {
+  cursor: default;
+}
+.check > div {
+  flex: 1;
+}
+.allow-list {
+  margin: -4px 0 8px 32px;
+}
+.allow-list .check {
+  margin: 4px 0;
+}
+.alias-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.alias-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg2);
+  border-radius: calc(var(--radius) * 0.6);
+  font-size: 0.9rem;
+}
+.perm-group {
+  margin-bottom: 8px;
+}
+.perm-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: calc(var(--radius) * 0.5);
+  font-size: 0.9rem;
+}
+.perm-row:hover {
+  background: var(--hover);
+}
+.level-select {
+  width: 190px;
+  flex-shrink: 0;
+  padding: 4px 6px !important;
+  font-size: 0.85rem;
+}
+@media (max-width: 600px) {
+  .level-select {
+    width: 140px;
+  }
+}
+.role-fixed {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--admin-color);
+  padding: 4px 10px;
+  border-radius: calc(var(--radius) * 0.5);
+  background: color-mix(in srgb, var(--admin-color) 15%, transparent);
+  cursor: help;
+}

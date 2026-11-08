@@ -1,5 +1,6 @@
 import { useAppStore } from "../../store/app";
-import { ChannelSettingsModal, CreateCategoryModal, CreateChannelModal, CreateServerModal, JoinServerModal } from "./ServerModals";
+import { CreateCategoryModal, CreateChannelModal, CreateServerModal, JoinServerModal } from "./ServerModals";
+import RoomSettingsModal from "./RoomSettingsModal";
 import ServerSettingsModal from "./ServerSettingsModal";
 import UserSettingsModal from "./UserSettingsModal";
 import { InviteModal, StartDmModal, UserProfileModal } from "./UserModals";
@@ -20,7 +21,7 @@ export default function ModalHost() {
     case "serverSettings":
       return <ServerSettingsModal onClose={close} spaceId={modal.spaceId} />;
     case "channelSettings":
-      return <ChannelSettingsModal onClose={close} roomId={modal.roomId} spaceId={modal.spaceId} />;
+      return <RoomSettingsModal onClose={close} roomId={modal.roomId} spaceId={modal.spaceId} initialTab={modal.tab} />;
     case "invite":
       return <InviteModal onClose={close} roomId={modal.roomId} />;
     case "userSettings":

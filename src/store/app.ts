@@ -7,7 +7,12 @@ export type ModalState =
   | { type: "createChannel"; spaceId: string; parentId?: string; voice?: boolean }
   | { type: "createCategory"; spaceId: string }
   | { type: "serverSettings"; spaceId: string }
-  | { type: "channelSettings"; roomId: string; spaceId?: string }
+  | {
+      type: "channelSettings";
+      roomId: string;
+      spaceId?: string;
+      tab?: "general" | "security" | "roles" | "notifications" | "advanced";
+    }
   | { type: "invite"; roomId: string }
   | { type: "userSettings"; tab?: string }
   | { type: "userProfile"; userId: string; roomId?: string }

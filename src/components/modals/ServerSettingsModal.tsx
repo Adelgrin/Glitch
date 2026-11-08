@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EventType, JoinRule, KnownMembership } from "matrix-js-sdk";
+import { EventType, KnownMembership } from "matrix-js-sdk";
 import { getClient } from "../../matrix/client";
 import { BANNER_EVENT, serverName } from "../../matrix/rooms";
 import { uploadBlob, useMxc } from "../../matrix/media";
@@ -7,34 +7,43 @@ import { useVersion } from "../../store/app";
 import Avatar from "../Avatar";
 import { ImageField } from "./Modal";
 import { IconX } from "../icons";
+import { AdvancedPanel, RolesPanel, SecurityPanel } from "./RoomSettingsModal";
 
 export default function ServerSettingsModal({ onClose, spaceId }: { onClose(): void; spaceId: string }) {
   useVersion();
   const c = getClient();
   const space = c.getRoom(spaceId);
-  const [tab, setTab] = useState<"overview" | "members" | "address">("overview");
+  type Tab = "overview" | "members" | "address" | "security" | "roles" | "advanced";
+  const [tab, setTab] = useState<Tab>("overview");
   if (!space) return null;
+  const tabs: [Tab, string][] = [
+    ["overview", "Visão geral"],
+    ["members", "Membros"],
+    ["roles", "Cargos e permissões"],
+    ["security", "Segurança e privacidade"],
+    ["address", "Endereço e convites"],
+    ["advanced", "Avançado"],
+  ];
   return (
     <div className="settings-page">
       <nav className="settings-nav">
         <div className="settings-nav-inner">
           <div className="section-label ellipsis">{space.name}</div>
-          <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
-            Visão geral
-          </button>
-          <button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>
-            Membros e cargos
-          </button>
-          <button className={tab === "address" ? "active" : ""} onClick={() => setTab("address")}>
-            Endereço e convites
-          </button>
+          {tabs.map(([id, label]) => (
+            <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          ))}
         </div>
       </nav>
       <div className="settings-content">
         <div className="settings-content-inner">
           {tab === "overview" && <Overview spaceId={spaceId} />}
           {tab === "members" && <Members spaceId={spaceId} />}
+          {tab === "roles" && <RolesPanel room={space} />}
+          {tab === "security" && <SecurityPanel room={space} />}
           {tab === "address" && <Address spaceId={spaceId} />}
+          {tab === "advanced" && <AdvancedPanel room={space} onClose={onClose} />}
         </div>
         <button className="settings-close" onClick={onClose} title="Fechar (Esc)">
           <IconX />
@@ -177,9 +186,10 @@ function Members({ spaceId }: { spaceId: string }) {
 
   return (
     <>
-      <h2>Membros e cargos</h2>
+      <h2>Membros</h2>
       <p className="muted small">
-        Cargos usam níveis de poder do Matrix: Administrador (100), Moderador (50) e Membro (0).
+        Cargos usam níveis de poder do Matrix: Administrador (100), Moderador (50) e Membro (0). O que cada cargo pode
+        fazer fica em “Cargos e permissões”.
       </p>
       <input className="search-input wide" placeholder="Buscar membros" value={filter} onChange={(e) => setFilter(e.target.value)} />
       <div className="member-table">
@@ -273,25 +283,7 @@ function Address({ spaceId }: { spaceId: string }) {
         </button>
       </div>
       {msg && <p className="small">{msg}</p>}
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={isPublic}
-          onChange={async (e) => {
-            try {
-              await c.sendStateEvent(
-                spaceId,
-                EventType.RoomJoinRules,
-                { join_rule: e.target.checked ? JoinRule.Public : JoinRule.Invite },
-                "",
-              );
-            } catch (err) {
-              setMsg(err instanceof Error ? err.message : String(err));
-            }
-          }}
-        />
-        Qualquer pessoa pode entrar (público)
-      </label>
+      <p className="muted small">Para mudar quem pode entrar, use a aba “Segurança e privacidade”.</p>
     </>
   );
 }

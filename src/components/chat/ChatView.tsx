@@ -2,12 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { EventTimeline, EventType, RelationType, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { getClient } from "../../matrix/client";
 import { getDirectRoomIds, getDmPartner, isVoiceRoom } from "../../matrix/rooms";
-import { useVersion } from "../../store/app";
+import { useAppStore, useVersion } from "../../store/app";
 import { useSettings } from "../../store/settings";
 import { MessageItem } from "./MessageItem";
 import Composer from "./Composer";
 import { formatDay } from "./format";
-import { IconAt, IconHash, IconSpeaker, IconUsers, IconX } from "../icons";
+import { IconAt, IconHash, IconSettings, IconSpeaker, IconUsers, IconX } from "../icons";
 
 const SHOWN = new Set<string>([EventType.RoomMessage, EventType.RoomMessageEncrypted, EventType.Sticker, EventType.RoomMember]);
 const GROUP_MS = 7 * 60 * 1000;
@@ -137,6 +137,15 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
           </>
         )}
         <span className="flex-spacer" />
+        {!embedded && (
+          <button
+            className="icon-btn"
+            title="Configurações da sala"
+            onClick={() => useAppStore.getState().openModal({ type: "channelSettings", roomId: room.roomId })}
+          >
+            <IconSettings />
+          </button>
+        )}
         {showMembersToggle && (
           <button
             className={`icon-btn ${showMembers ? "active" : ""}`}
