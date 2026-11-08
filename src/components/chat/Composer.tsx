@@ -3,9 +3,11 @@ import { EventType, MsgType, RelationType, type Room } from "matrix-js-sdk";
 import { getClient } from "../../matrix/client";
 import { encryptAttachment } from "../../matrix/encrypt";
 import { useAppStore } from "../../store/app";
-import EmojiPicker from "./EmojiPicker";
+import { emoticonMap, getAvailablePacks } from "../../matrix/imagePacks";
+import { emoteFormatting, sendSticker } from "../../matrix/emotes";
+import ExpressionPicker from "./ExpressionPicker";
 import { stripReplyFallback } from "./format";
-import { IconPlus, IconSmile, IconX } from "../icons";
+import { IconPlus, IconSmile, IconSticker, IconX } from "../icons";
 
 function imageSize(file: File): Promise<{ w: number; h: number } | null> {
   return new Promise((resolve) => {
@@ -51,7 +53,9 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
   const me = c.getUserId()!;
   const [text, setText] = useState("");
   const [uploading, setUploading] = useState<string | null>(null);
-  const [picker, setPicker] = useState(false);
+  const [picker, setPicker] = useState<"emoji" | "sticker" | null>(null);
+  const emojiBtn = useRef<HTMLButtonElement>(null);
+  const stickerBtn = useRef<HTMLButtonElement>(null);
   const replyTo = useAppStore((s) => s.replyTo[room.roomId]);
   const editing = useAppStore((s) => s.editing[room.roomId]);
   const setReplyTo = useAppStore((s) => s.setReplyTo);
@@ -90,6 +94,20 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
     el.style.height = Math.min(el.scrollHeight, 300) + "px";
   }, [text]);
 
+  /** Insere texto na posição do cursor (a janela de emojis continua aberta). */
+  const insertText = (s: string) => {
+    const el = ta.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + s + text.slice(end);
+    setText(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(start + s.length, start + s.length);
+    });
+  };
+
   const typing = (v: string) => {
     const now = Date.now();
     if (v && now - lastTyping.current > 3000) {
@@ -104,12 +122,15 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
     setText("");
     lastTyping.current = 0;
     c.sendTyping(room.roomId, false, 0).catch(() => undefined);
+    const emotes = emoticonMap(getAvailablePacks(room));
     if (editing) {
       setEditing(room.roomId, undefined);
+      const fmt = emoteFormatting(body, emotes);
       await c.sendMessage(room.roomId, {
         msgtype: MsgType.Text,
         body: `* ${body}`,
-        "m.new_content": { msgtype: MsgType.Text, body },
+        ...(fmt ? { format: fmt.format, formatted_body: `* ${fmt.formatted_body}` } : {}),
+        "m.new_content": { msgtype: MsgType.Text, body, ...(fmt ?? {}) },
         "m.relates_to": { rel_type: RelationType.Replace, event_id: editing },
       } as never);
       return;
@@ -119,6 +140,8 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
       content.msgtype = MsgType.Emote;
       content.body = body.slice(4);
     }
+    const fmt = emoteFormatting(content.body as string, emotes);
+    if (fmt) Object.assign(content, fmt);
     if (replyTo) {
       content["m.relates_to"] = { "m.in_reply_to": { event_id: replyTo } };
       setReplyTo(room.roomId, undefined);
@@ -241,21 +264,45 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
             }
           }}
         />
-        <div className="composer-emoji">
-          <button className="composer-btn" title="Emoji" disabled={!canSend} onClick={() => setPicker((p) => !p)}>
-            <IconSmile size={22} />
-          </button>
-          {picker && (
-            <EmojiPicker
-              onPick={(e) => {
-                setText((t) => t + e);
-                setPicker(false);
-                ta.current?.focus();
-              }}
-              onClose={() => setPicker(false)}
-            />
-          )}
-        </div>
+        <button
+          ref={stickerBtn}
+          className="composer-btn"
+          title="Figurinhas"
+          disabled={!canSend}
+          onClick={() => setPicker((p) => (p === "sticker" ? null : "sticker"))}
+        >
+          <IconSticker size={22} />
+        </button>
+        <button
+          ref={emojiBtn}
+          className="composer-btn"
+          title="Emojis"
+          disabled={!canSend}
+          onClick={() => setPicker((p) => (p === "emoji" ? null : "emoji"))}
+        >
+          <IconSmile size={22} />
+        </button>
+        {picker && (
+          <ExpressionPicker
+            key={picker}
+            room={room}
+            mode="composer"
+            initialTab={picker}
+            anchor={picker === "sticker" ? stickerBtn.current : emojiBtn.current}
+            onEmoji={(e) => {
+              insertText(e.kind === "unicode" ? e.text : `:${e.shortcode}: `);
+            }}
+            onSticker={async (img) => {
+              setPicker(null);
+              const reply = replyTo;
+              if (reply) setReplyTo(room.roomId, undefined);
+              onSent();
+              await sendSticker(room, img, reply).catch((err) => alert("Falha ao enviar a figurinha: " + err.message));
+              ta.current?.focus();
+            }}
+            onClose={() => setPicker(null)}
+          />
+        )}
       </div>
     </div>
   );

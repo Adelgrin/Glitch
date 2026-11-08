@@ -11,7 +11,7 @@ export type ModalState =
       type: "channelSettings";
       roomId: string;
       spaceId?: string;
-      tab?: "general" | "security" | "roles" | "notifications" | "advanced";
+      tab?: "general" | "security" | "roles" | "emotes" | "notifications" | "advanced";
     }
   | { type: "invite"; roomId: string }
   | { type: "userSettings"; tab?: string }

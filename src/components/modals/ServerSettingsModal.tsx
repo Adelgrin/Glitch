@@ -8,18 +8,20 @@ import Avatar from "../Avatar";
 import { ImageField } from "./Modal";
 import { IconX } from "../icons";
 import { AdvancedPanel, RolesPanel, SecurityPanel } from "./RoomSettingsModal";
+import { RoomPacksPanel } from "./StickerPacks";
 
 export default function ServerSettingsModal({ onClose, spaceId }: { onClose(): void; spaceId: string }) {
   useVersion();
   const c = getClient();
   const space = c.getRoom(spaceId);
-  type Tab = "overview" | "members" | "address" | "security" | "roles" | "advanced";
+  type Tab = "overview" | "members" | "address" | "security" | "roles" | "emotes" | "advanced";
   const [tab, setTab] = useState<Tab>("overview");
   if (!space) return null;
   const tabs: [Tab, string][] = [
     ["overview", "Visão geral"],
     ["members", "Membros"],
     ["roles", "Cargos e permissões"],
+    ["emotes", "Emojis e figurinhas"],
     ["security", "Segurança e privacidade"],
     ["address", "Endereço e convites"],
     ["advanced", "Avançado"],
@@ -41,6 +43,7 @@ export default function ServerSettingsModal({ onClose, spaceId }: { onClose(): v
           {tab === "overview" && <Overview spaceId={spaceId} />}
           {tab === "members" && <Members spaceId={spaceId} />}
           {tab === "roles" && <RolesPanel room={space} />}
+          {tab === "emotes" && <RoomPacksPanel room={space} />}
           {tab === "security" && <SecurityPanel room={space} />}
           {tab === "address" && <Address spaceId={spaceId} />}
           {tab === "advanced" && <AdvancedPanel room={space} onClose={onClose} />}

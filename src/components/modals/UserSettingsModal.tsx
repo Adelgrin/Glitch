@@ -11,8 +11,9 @@ import { IconShieldAlert, IconShieldCheck, IconX } from "../icons";
 import { refreshStatus, startRestore, startSelfVerification, useVerification, verifyOtherDevice } from "../../matrix/verification";
 import { RestoreStatus } from "./VerificationModal";
 import { BannerEditor, CallColorEditor } from "./ProfileAppearance";
+import { UserPacksPanel } from "./StickerPacks";
 
-type Tab = "account" | "security" | "appearance" | "voice" | "advanced";
+type Tab = "account" | "security" | "appearance" | "stickers" | "voice" | "advanced";
 
 export default function UserSettingsModal({ onClose, initialTab }: { onClose(): void; initialTab?: string }) {
   const [tab, setTab] = useState<Tab>((initialTab as Tab) ?? "account");
@@ -31,6 +32,9 @@ export default function UserSettingsModal({ onClose, initialTab }: { onClose(): 
           <button className={tab === "appearance" ? "active" : ""} onClick={() => setTab("appearance")}>
             Aparência
           </button>
+          <button className={tab === "stickers" ? "active" : ""} onClick={() => setTab("stickers")}>
+            Emojis e figurinhas
+          </button>
           <button className={tab === "voice" ? "active" : ""} onClick={() => setTab("voice")}>
             Voz e vídeo
           </button>
@@ -48,6 +52,7 @@ export default function UserSettingsModal({ onClose, initialTab }: { onClose(): 
           {tab === "account" && <Account />}
           {tab === "security" && <Security />}
           {tab === "appearance" && <Appearance />}
+          {tab === "stickers" && <UserPacksPanel />}
           {tab === "voice" && <VoiceVideo />}
           {tab === "advanced" && <Advanced />}
         </div>

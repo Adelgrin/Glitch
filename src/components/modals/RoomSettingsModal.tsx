@@ -24,9 +24,10 @@ import { leaveVoice, useVoice } from "../../voice/voice";
 import Avatar from "../Avatar";
 import { ImageField } from "./Modal";
 import { EscClose } from "./ServerSettingsModal";
+import { RoomPacksPanel } from "./StickerPacks";
 import { IconX } from "../icons";
 
-type Tab = "general" | "security" | "roles" | "notifications" | "advanced";
+type Tab = "general" | "security" | "roles" | "emotes" | "notifications" | "advanced";
 
 /** Configurações completas de uma sala/canal (nível do Element). */
 export default function RoomSettingsModal({
@@ -49,6 +50,7 @@ export default function RoomSettingsModal({
     ["general", "Geral"],
     ["security", "Segurança e privacidade"],
     ["roles", "Cargos e permissões"],
+    ["emotes", "Emojis e figurinhas"],
     ["notifications", "Notificações"],
     ["advanced", "Avançado"],
   ];
@@ -72,6 +74,7 @@ export default function RoomSettingsModal({
           {tab === "general" && <GeneralPanel room={room} spaceId={spaceId} onClose={onClose} />}
           {tab === "security" && <SecurityPanel room={room} />}
           {tab === "roles" && <RolesPanel room={room} />}
+          {tab === "emotes" && <RoomPacksPanel room={room} />}
           {tab === "notifications" && <NotificationsPanel room={room} />}
           {tab === "advanced" && <AdvancedPanel room={room} onClose={onClose} />}
         </div>

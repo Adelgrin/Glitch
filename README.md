@@ -49,6 +49,16 @@ Canais de servidores privados usam a regra de entrada `restricted`, então quem 
 - Avatar, ícone e banner do servidor também passam pelo editor de posicionamento. GIFs podem ser usados sem recorte para manter a animação.
 - CSS personalizado e exportar/importar tema em JSON.
 
+## Emojis e figurinhas
+
+- Janela com duas abas (**Emojis** e **Figurinhas**), aberta pelos botões ao lado da caixa de mensagem. A de emojis traz todos os emojis padrão (até o Unicode 15, com nomes e busca em português), recentes e tom de pele.
+- Pacotes personalizados no formato do Cinny (MSC2545), que também funcionam no FluffyChat e no Nheko:
+  - **Pacote pessoal** (account data `im.ponies.user_emotes`): em Configurações › Emojis e figurinhas.
+  - **Pacotes de sala ou servidor** (estado `im.ponies.room_emotes`): na aba Emojis e figurinhas das configurações da sala ou do servidor. Aparecem em todos os canais do servidor.
+  - **Usar em todas as salas** (`im.ponies.emote_rooms`) e **Copiar para o meu pacote**.
+- Para criar um pacote, envie várias imagens de uma vez (botão ou arrastar). Cada imagem ganha um `:atalho:` a partir do nome do arquivo e pode ser emoji, figurinha ou os dois.
+- Emojis personalizados na mensagem viram `<img data-mx-emoticon>`; figurinhas são eventos `m.sticker`; reações com emoji personalizado usam a URL `mxc://` com o campo `shortcode`, como no Cinny.
+
 ## Configurações de sala
 
 Pela engrenagem do canal (ou no cabeçalho do chat, que vale também para DMs) abre uma página com:

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import CustomEmoji from "./CustomEmoji";
 
 /** Remove o fallback de resposta ("> <@fulano> texto") do corpo da mensagem. */
 export function stripReplyFallback(body: string): string {
@@ -82,6 +83,106 @@ export function renderBody(body: string, myId: string): ReactNode {
       );
     });
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* HTML com emojis personalizados (<img data-mx-emoticon>)             */
+/* ------------------------------------------------------------------ */
+
+export function hasEmotes(html: string) {
+  return html.includes("data-mx-emoticon");
+}
+
+function parseHtml(html: string): Element {
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstElementChild!;
+  root.querySelectorAll("mx-reply").forEach((n) => n.remove());
+  return root;
+}
+
+/** Só emojis (personalizados ou não) → exibe maior, como no Discord. */
+export function isOnlyEmotes(html: string) {
+  const root = parseHtml(html);
+  const imgs = root.querySelectorAll("img[data-mx-emoticon]").length;
+  const text = (root.textContent ?? "").trim();
+  return imgs > 0 && imgs <= 12 && (text === "" || isOnlyEmoji(text));
+}
+
+const BLOCK_TAGS = new Set(["p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol"]);
+
+/**
+ * Renderiza o formatted_body de forma segura: só uma lista fechada de tags vira
+ * elemento; o resto vira texto. Imagens só aparecem se forem emojis mxc://.
+ */
+export function renderEmoteHtml(html: string, myId: string): ReactNode {
+  const root = parseHtml(html);
+  let n = 0;
+  const walk = (node: Node): ReactNode => {
+    const k = `h${n++}`;
+    if (node.nodeType === Node.TEXT_NODE) return <span key={k}>{inline(node.textContent ?? "", k, myId)}</span>;
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+    const el = node as Element;
+    const tag = el.tagName.toLowerCase();
+    const kids = () => Array.from(el.childNodes).map(walk);
+    switch (tag) {
+      case "img": {
+        const src = el.getAttribute("src") ?? "";
+        const alt = el.getAttribute("alt") ?? el.getAttribute("title") ?? "";
+        return src.startsWith("mxc://") ? <CustomEmoji key={k} mxc={src} alt={alt} className="custom-emoji inline" /> : alt;
+      }
+      case "br":
+        return <br key={k} />;
+      case "strong":
+      case "b":
+        return <strong key={k}>{kids()}</strong>;
+      case "em":
+      case "i":
+        return <em key={k}>{kids()}</em>;
+      case "del":
+      case "s":
+      case "strike":
+        return <s key={k}>{kids()}</s>;
+      case "u":
+        return <u key={k}>{kids()}</u>;
+      case "code":
+        return <code key={k}>{el.textContent}</code>;
+      case "pre":
+        return (
+          <pre key={k} className="code-block">
+            {el.textContent}
+          </pre>
+        );
+      case "blockquote":
+        return (
+          <span key={k} className="quote">
+            {kids()}
+          </span>
+        );
+      case "a": {
+        const href = el.getAttribute("href") ?? "";
+        return /^https?:\/\//i.test(href) ? (
+          <a key={k} href={href} target="_blank" rel="noreferrer noopener">
+            {kids()}
+          </a>
+        ) : (
+          <span key={k}>{kids()}</span>
+        );
+      }
+      case "span":
+        return el.hasAttribute("data-mx-spoiler") ? <Spoiler key={k}>{kids()}</Spoiler> : <span key={k}>{kids()}</span>;
+      default:
+        if (BLOCK_TAGS.has(tag)) {
+          return (
+            <span key={k}>
+              {kids()}
+              {el.nextSibling && <br />}
+            </span>
+          );
+        }
+        return <span key={k}>{kids()}</span>;
+    }
+  };
+  return Array.from(root.childNodes).map(walk);
 }
 
 export function isOnlyEmoji(body: string): boolean {

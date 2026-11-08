@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { EventType, RelationType, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { getClient } from "../../matrix/client";
 import { useEncryptedMedia, useMxc, type EncryptedFileInfo } from "../../matrix/media";
 import { useAppStore } from "../../store/app";
 import { useSettings } from "../../store/settings";
 import Avatar, { colorFor } from "../Avatar";
-import EmojiPicker from "./EmojiPicker";
-import { formatBytes, formatTime, isOnlyEmoji, renderBody, stripReplyFallback } from "./format";
+import ExpressionPicker from "./ExpressionPicker";
+import CustomEmoji from "./CustomEmoji";
+import { formatBytes, formatTime, hasEmotes, isOnlyEmoji, isOnlyEmotes, renderBody, renderEmoteHtml, stripReplyFallback } from "./format";
 import { IconDownload, IconEdit, IconReply, IconSmile, IconTrash } from "../icons";
 
 interface Props {
@@ -26,6 +27,7 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
   const timeFmt = useSettings((s) => s.appearance.timeFormat);
   const showSeconds = useSettings((s) => s.appearance.showSeconds);
   const [picker, setPicker] = useState(false);
+  const reactBtn = useRef<HTMLButtonElement>(null);
 
   const sender = ev.getSender()!;
   const member = room.getMember(sender);
@@ -41,7 +43,8 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
   const mentionsMe = !isMine && (body.includes(me) || (!!c.getUser(me)?.displayName && body.includes(c.getUser(me)!.displayName!)));
   const replyId = content["m.relates_to"]?.["m.in_reply_to"]?.event_id as string | undefined;
 
-  const react = async (key: string) => {
+  /** key = emoji unicode ou mxc:// (emoji personalizado, com o :atalho: em `shortcode`, como no Cinny) */
+  const react = async (key: string, shortcode?: string) => {
     setPicker(false);
     const rels = room.relations.getChildEventsForEvent(ev.getId()!, RelationType.Annotation, EventType.Reaction);
     const mine = rels?.getAnnotationsBySender()?.[me];
@@ -50,7 +53,8 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
     else
       await c.sendEvent(room.roomId, EventType.Reaction, {
         "m.relates_to": { rel_type: RelationType.Annotation, event_id: ev.getId()!, key },
-      });
+        ...(shortcode ? { shortcode: `:${shortcode}:` } : {}),
+      } as never);
   };
 
   const remove = async () => {
@@ -95,8 +99,8 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
         </div>
       </div>
       {!ev.status && (
-        <div className="message-toolbar">
-          <button className="icon-btn tiny" title="Reagir" onClick={() => setPicker((p) => !p)}>
+        <div className={`message-toolbar ${picker ? "open" : ""}`}>
+          <button ref={reactBtn} className="icon-btn tiny" title="Reagir" onClick={() => setPicker((p) => !p)}>
             <IconSmile size={18} />
           </button>
           <button className="icon-btn tiny" title="Responder" onClick={() => setReplyTo(room.roomId, ev.getId()!)}>
@@ -112,7 +116,15 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
               <IconTrash size={18} />
             </button>
           )}
-          {picker && <EmojiPicker onPick={react} onClose={() => setPicker(false)} />}
+          {picker && (
+            <ExpressionPicker
+              room={room}
+              mode="reaction"
+              anchor={reactBtn.current}
+              onEmoji={(e) => void (e.kind === "unicode" ? react(e.text) : react(e.url, e.shortcode))}
+              onClose={() => setPicker(false)}
+            />
+          )}
         </div>
       )}
     </div>
@@ -192,6 +204,18 @@ function MessageBody({
   if (ev.getType() === EventType.Sticker) {
     return <MediaImage content={content} onOpen={onOpenImage} sticker />;
   }
+  // Mensagens com emojis personalizados vêm em HTML (<img data-mx-emoticon>)
+  const html = content.format === "org.matrix.custom.html" && typeof content.formatted_body === "string" ? content.formatted_body : null;
+  if (html && hasEmotes(html) && (content.msgtype === "m.text" || content.msgtype === "m.emote" || content.msgtype === "m.notice")) {
+    const jumbo = isOnlyEmotes(html);
+    return (
+      <div className={`message-body ${content.msgtype === "m.notice" ? "muted" : ""} ${content.msgtype === "m.emote" ? "italic" : ""} ${jumbo ? "emote-jumbo" : ""}`}>
+        {content.msgtype === "m.emote" && <>* {ev.sender?.name} </>}
+        {renderEmoteHtml(html, myId)}
+        {edited && <span className="edited"> (editado)</span>}
+      </div>
+    );
+  }
   switch (content.msgtype) {
     case "m.image":
       return <MediaImage content={content} onOpen={onOpenImage} />;
@@ -269,7 +293,17 @@ function MediaFile({ content }: { content: Content }) {
   );
 }
 
-function Reactions({ room, ev, myId, onReact }: { room: Room; ev: MatrixEvent; myId: string; onReact(k: string): void }) {
+function Reactions({
+  room,
+  ev,
+  myId,
+  onReact,
+}: {
+  room: Room;
+  ev: MatrixEvent;
+  myId: string;
+  onReact(k: string, shortcode?: string): void;
+}) {
   const rels = room.relations.getChildEventsForEvent(ev.getId()!, RelationType.Annotation, EventType.Reaction);
   const sorted = rels?.getSortedAnnotationsByKey();
   if (!sorted?.length) return null;
@@ -280,9 +314,16 @@ function Reactions({ room, ev, myId, onReact }: { room: Room; ev: MatrixEvent; m
         if (!list.length) return null;
         const mine = list.some((e) => e.getSender() === myId);
         const who = list.map((e) => room.getMember(e.getSender()!)?.name ?? e.getSender()).join(", ");
+        const custom = key.startsWith("mxc://");
+        const shortcode = custom ? (list.map((e) => e.getContent().shortcode).find((s) => typeof s === "string") as string | undefined) : undefined;
         return (
-          <button key={key} className={`reaction ${mine ? "mine" : ""}`} title={who} onClick={() => onReact(key)}>
-            <span>{key}</span>
+          <button
+            key={key}
+            className={`reaction ${mine ? "mine" : ""}`}
+            title={shortcode ? `${shortcode} — ${who}` : who}
+            onClick={() => onReact(key, shortcode?.replace(/^:|:$/g, ""))}
+          >
+            {custom ? <CustomEmoji mxc={key} alt={shortcode ?? "emoji"} size={18} /> : <span>{key}</span>}
             <span className="reaction-count">{list.length}</span>
           </button>
         );
