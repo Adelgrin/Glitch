@@ -1,0 +1,71 @@
+# MatrixCord
+
+Cliente web para o protocolo [Matrix](https://matrix.org) com cara e jeito de Discord.
+
+## Rodando
+
+```bash
+npm install
+npm run dev
+```
+
+Abra http://localhost:5173 e entre com qualquer conta Matrix (ex.: `matrix.org`).
+
+- `npm run build` — gera a versão de produção em `dist/`
+- `npm run typecheck` — checa os tipos
+- `http://localhost:5173/?preview=appearance` — (só em dev) abre a tela de Aparência sem login, útil para mexer no visual
+
+## Como o Discord vira Matrix
+
+| Discord              | Matrix                                                                 |
+| -------------------- | ---------------------------------------------------------------------- |
+| Servidor             | Espaço (`m.space`)                                                     |
+| Categoria            | Sub-espaço dentro do servidor                                          |
+| Canal de texto       | Sala filha do espaço                                                   |
+| Canal de voz         | Sala do tipo `org.matrix.msc3417.call` (igual às “video rooms” do Element) |
+| Quem está na voz     | Memberships MatrixRTC (`org.matrix.msc3401.call.member`) — visíveis sem entrar |
+| Cargos               | Níveis de poder (100 admin, 50 moderador)                              |
+| Banner do servidor   | Evento de estado `com.matrixcord.space.banner`                         |
+
+Canais de servidores privados usam a regra de entrada `restricted`, então quem está no servidor entra nos canais sem convite.
+
+## Voz, vídeo e transmissões
+
+- Usa **MatrixRTC + LiveKit**, o mesmo sistema do Element Call — dá para falar com quem estiver usando Element.
+- O SFU é descoberto pelo servidor (`/rtc/transports` ou `.well-known` → `org.matrix.msc4143.rtc_foci`). Se o seu servidor não anunciar um, informe a URL do `lk-jwt-service` em **Configurações › Avançado**.
+- A conexão LiveKit é feita com `autoSubscribe: false`: o cliente só baixa o vídeo que você escolhe.
+  - Transmissões de tela aparecem como “AO VIVO” com o botão **Assistir transmissão**; dá para assistir várias ao mesmo tempo, em grade ou com uma em foco.
+  - Câmeras aparecem automaticamente (configurável) e podem ser ocultadas uma a uma.
+- Volume por pessoa e por transmissão (0–200%), tela cheia, picture-in-picture, escolha de resolução/FPS da sua transmissão, dispositivos de entrada/saída/câmera, supressão de ruído.
+- Estado de mudo/ensurdecido/câmera/ao vivo é publicado na membership, então quem não está na chamada vê os ícones embaixo do canal.
+
+## Personalização
+
+- 7 temas prontos + todas as cores editáveis, cor de destaque, fonte, tamanho do texto, densidade, cantos, formato dos avatares, larguras das colunas, animações, formato da hora.
+- Planos de fundo do chat e do app com **posicionamento antes de aplicar** (arrastar, zoom, girar), escurecer e desfoque.
+- Avatar, ícone e banner do servidor também passam pelo editor de posicionamento. GIFs podem ser usados sem recorte para manter a animação.
+- CSS personalizado e exportar/importar tema em JSON.
+
+## Estrutura
+
+```
+src/
+  matrix/      cliente, salas/espaços, mídia autenticada, criptografia de anexos
+  voice/       MatrixRTC + LiveKit (voice.ts), memberships, sons
+  store/       estado da UI e configurações (zustand, salvas no localStorage)
+  components/  interface (barra de servidores, canais, chat, chamada, modais)
+```
+
+## Limitações conhecidas
+
+- Criptografia de ponta a ponta: mensagens são decifradas, mas ainda não há verificação de sessão nem backup de chaves. Canais novos são criados sem E2EE por padrão.
+- Chamadas sem E2EE de mídia; numa sala onde o Element Call usa mídia criptografada, as pessoas não vão se ouvir entre os dois clientes.
+- Conecta só ao SFU de quem iniciou a chamada (cenário multi-SFU entre servidores diferentes ainda não é suportado).
+- Login por senha e SSO; o login OIDC nativo (MAS) ainda não foi implementado.
+
+## Próximo passo: instalável
+
+O app é 100% front-end, então pode ser empacotado sem mudanças grandes:
+
+- **Tauri** (recomendado): instalador pequeno (~10 MB), usa o WebView2 do Windows.
+- **Electron**: maior (~100 MB), mas com Chromium embutido — comportamento de WebRTC/compartilhamento de tela idêntico ao Chrome e acesso fácil a atalhos globais (push-to-talk) e captura de áudio do sistema.

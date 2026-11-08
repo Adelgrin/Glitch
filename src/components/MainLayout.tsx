@@ -1,0 +1,63 @@
+import { useEffect } from "react";
+import { getClient } from "../matrix/client";
+import { isVoiceRoom } from "../matrix/rooms";
+import { useAppStore, useVersion } from "../store/app";
+import { useSettings } from "../store/settings";
+import ServerRail from "./ServerRail";
+import ChannelSidebar from "./ChannelSidebar";
+import ChatView from "./chat/ChatView";
+import CallView from "./call/CallView";
+import MemberList from "./MemberList";
+import ModalHost from "./modals/ModalHost";
+import { IconChat } from "./icons";
+
+export default function MainLayout() {
+  useVersion();
+  const spaceId = useAppStore((s) => s.selectedSpaceId);
+  const roomId = useAppStore((s) => s.selectedRooms[s.selectedSpaceId ?? "home"]);
+  const showMembers = useSettings((s) => s.appearance.showMemberList);
+  const appBg = useSettings((s) => s.appearance.appBackground);
+  const c = getClient();
+  const room = roomId ? c.getRoom(roomId) : null;
+  const voice = isVoiceRoom(room);
+
+  // Se o espaço selecionado sumiu (saiu do servidor), volta ao início
+  useEffect(() => {
+    if (spaceId && !c.getRoom(spaceId)) useAppStore.getState().selectSpace(null);
+  });
+
+  return (
+    <div className={`app ${appBg.image ? "has-app-bg" : ""}`}>
+      {appBg.image && (
+        <div className="app-bg" style={{ backgroundImage: `url(${appBg.image})` }}>
+          <div className="app-bg-dim" />
+        </div>
+      )}
+      <ServerRail />
+      <ChannelSidebar />
+      <main className="main">
+        {room && room.getMyMembership() === "join" ? (
+          voice ? (
+            <CallView room={room} />
+          ) : (
+            <ChatView room={room} showMembersToggle />
+          )
+        ) : (
+          <EmptyMain />
+        )}
+      </main>
+      {showMembers && room && !voice && <MemberList room={room} spaceId={spaceId} />}
+      <ModalHost />
+    </div>
+  );
+}
+
+function EmptyMain() {
+  return (
+    <div className="empty-main">
+      <IconChat size={56} />
+      <h2>Nada por aqui ainda</h2>
+      <p className="muted">Escolha um canal à esquerda, crie um servidor ou inicie uma conversa.</p>
+    </div>
+  );
+}
