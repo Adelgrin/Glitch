@@ -13,7 +13,7 @@ import {
   type TrackPublication,
   type VideoResolution,
 } from "livekit-client";
-import { KnownMembership } from "matrix-js-sdk";
+import { ClientEvent, KnownMembership, type MatrixEvent } from "matrix-js-sdk";
 import {
   MatrixRTCSessionEvent,
   type CallMembership,
@@ -229,8 +229,23 @@ function resolveUserId(identity: string): string {
 
 /** KeyProvider com uma chave por participante (o padrão do livekit só tem chave única compartilhada). */
 class ParticipantKeyProvider extends BaseKeyProvider {
-  setKey(key: Uint8Array, participantIdentity: string, keyIndex = 0) {
-    this.onSetEncryptionKey(key as unknown as CryptoKey, participantIdentity, keyIndex);
+  constructor() {
+    // Mesmos parâmetros do Element Call: o matrix-js-sdk usa índices de chave 0..255
+    // (o keyring padrão do livekit tem só 16 posições).
+    super({ sharedKey: false, ratchetWindowSize: 10, keyringSize: 256 });
+  }
+
+  /**
+   * O worker de E2EE espera um CryptoKey HKDF (ele lê `material.algorithm.name`
+   * para derivar a chave AES-GCM). Passar o Uint8Array cru faz a derivação
+   * falhar e nenhum frame é cifrado/decifrado.
+   */
+  async setKey(key: Uint8Array, participantIdentity: string, keyIndex = 0) {
+    const material = await crypto.subtle.importKey("raw", key as BufferSource, "HKDF", false, [
+      "deriveBits",
+      "deriveKey",
+    ]);
+    this.onSetEncryptionKey(material, participantIdentity, keyIndex);
   }
 }
 
@@ -239,15 +254,36 @@ let keyProvider: ParticipantKeyProvider | null = null;
 const onEncryptionKeyChanged = (
   key: Uint8Array,
   encryptionKeyIndex: number,
-  _membership: CallMembershipIdentityParts,
+  membership: CallMembershipIdentityParts,
   backendIdentity: string,
 ) => {
-  if (!keyProvider || !backendIdentity) return;
-  keyProvider.setKey(key, backendIdentity, encryptionKeyIndex);
+  if (!keyProvider) return;
+  // O backendIdentity das memberships novas (sticky events) é um hash sha256
+  // anonimizado, que pode não ser a identidade LiveKit real do participante
+  // (formato legado: "@user:server:device"). Registra a chave sob todas as
+  // identidades candidatas para garantir o casamento no worker de E2EE.
+  const mem = session?.memberships.find(
+    (m) => m.userId === membership.userId && m.deviceId === membership.deviceId,
+  );
+  const candidates = new Set<string>([backendIdentity, membership.memberId]);
+  if (mem) {
+    candidates.add(mem.memberId);
+    mem.backendIdentities?.forEach((id) => candidates.add(id));
+  }
+  console.debug(
+    `[e2ee] chave recebida idx=${encryptionKeyIndex} len=${key.length} identidades=`,
+    [...candidates],
+  );
+  for (const id of candidates) {
+    if (id)
+      keyProvider
+        .setKey(key, id, encryptionKeyIndex)
+        .catch((e) => console.error("[e2ee] falha ao importar chave", id, e));
+  }
 };
 
 function ensureKeyProvider(enabled: boolean) {
-  keyProvider = enabled ? new ParticipantKeyProvider({ sharedKey: false }) : null;
+  keyProvider = enabled ? new ParticipantKeyProvider() : null;
   return keyProvider;
 }
 
@@ -255,8 +291,109 @@ function wireEncryptionKeys(rtc: MatrixRTCSession) {
   rtc.on(MatrixRTCSessionEvent.EncryptionKeyChanged, onEncryptionKeyChanged);
 }
 
+const CALL_KEYS_TYPE = "io.element.call.encryption_keys";
+
+/**
+ * Compatibilidade com o Element Call embutido no Cinny.
+ *
+ * O matrix-js-sdk 45 só aceita uma chave quando (userId, deviceId, memberId) da
+ * chave batem com uma membership. O Element Call do Cinny envia `member.id` com
+ * um UUID interno, mas publica a membership com `membershipID = user:device`.
+ * O SDK então estaciona a chave para sempre ("No matching RTC membership") e o
+ * áudio/vídeo dele chega mudo para nós.
+ *
+ * Aqui aplicamos a mesma regra do próprio Element Call: casar só por
+ * (userId, deviceId). Aceitamos apenas eventos que chegaram cifrados com Olm,
+ * e o userId vem do remetente verificado pelo Olm, não do conteúdo.
+ */
+interface PendingKey {
+  userId: string;
+  deviceId: string;
+  key: Uint8Array;
+  index: number;
+}
+let pendingKeys: PendingKey[] = [];
+let toDeviceListener: ((ev: MatrixEvent) => void) | null = null;
+let membershipsListener: (() => void) | null = null;
+let keyRtc: MatrixRTCSession | null = null;
+
+function b64ToBytes(b64: string): Uint8Array {
+  const norm = b64.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(norm + "=".repeat((4 - (norm.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Tenta aplicar a chave; devolve false se ainda não há membership para o dispositivo. */
+function applyKeyByDevice(k: PendingKey): boolean {
+  if (!keyProvider || !keyRtc) return true;
+  const mem = keyRtc.memberships.find((m) => m.userId === k.userId && m.deviceId === k.deviceId);
+  if (!mem) return false;
+  const ids = new Set<string>([`${k.userId}:${k.deviceId}`, ...(mem.backendIdentities ?? [])]);
+  for (const id of ids) {
+    keyProvider
+      .setKey(k.key, id, k.index)
+      .catch((e) => console.error("[e2ee] falha ao importar chave", id, e));
+  }
+  console.debug(`[e2ee] chave de ${k.userId}:${k.deviceId} idx=${k.index} aplicada em`, [...ids]);
+  return true;
+}
+
+function wireKeyCompat(rtc: MatrixRTCSession) {
+  unwireKeyCompat();
+  keyRtc = rtc;
+  const roomId = rtc.room.roomId;
+  const myUser = getClient().getUserId();
+  const myDevice = getClient().getDeviceId();
+
+  toDeviceListener = (ev: MatrixEvent) => {
+    if (ev.getType() !== CALL_KEYS_TYPE) return;
+    const sender = ev.getSender();
+    const c = ev.getContent();
+    const deviceId = c.member?.claimed_device_id;
+    const mk = c.media_key ?? c.keys;
+    // Só metadados no log, nunca o material da chave.
+    console.debug("[e2ee] to-device de chave:", {
+      de: sender,
+      wire: ev.getWireType(),
+      member_id: c.member_id ?? c.member?.id,
+      device: deviceId,
+      indice: mk?.index,
+    });
+    if (ev.getWireType() !== "m.room.encrypted") {
+      console.warn("[e2ee] chave de chamada SEM criptografia Olm de", sender, "— ignorada");
+      return;
+    }
+    if (!sender || c.room_id !== roomId || typeof deviceId !== "string") return;
+    if (sender === myUser && deviceId === myDevice) return;
+    if (!mk || typeof mk.key !== "string" || typeof mk.index !== "number") return;
+    const k: PendingKey = { userId: sender, deviceId, key: b64ToBytes(mk.key), index: mk.index };
+    if (!applyKeyByDevice(k)) pendingKeys.push(k);
+  };
+  getClient().on(ClientEvent.ToDeviceEvent, toDeviceListener);
+
+  membershipsListener = () => {
+    if (!pendingKeys.length) return;
+    const left = pendingKeys;
+    pendingKeys = [];
+    for (const k of left) if (!applyKeyByDevice(k)) pendingKeys.push(k);
+  };
+  rtc.on(MatrixRTCSessionEvent.MembershipsChanged, membershipsListener);
+}
+
+function unwireKeyCompat() {
+  if (toDeviceListener) getClient().off(ClientEvent.ToDeviceEvent, toDeviceListener);
+  if (membershipsListener) keyRtc?.off(MatrixRTCSessionEvent.MembershipsChanged, membershipsListener);
+  toDeviceListener = null;
+  membershipsListener = null;
+  keyRtc = null;
+  pendingKeys = [];
+}
+
 function unwireEncryptionKeys(rtc: MatrixRTCSession | null) {
   rtc?.off(MatrixRTCSessionEvent.EncryptionKeyChanged, onEncryptionKeyChanged);
+  unwireKeyCompat();
   keyProvider = null;
 }
 
@@ -451,6 +588,7 @@ export async function joinVoice(roomId: string) {
     const e2ee = room.hasEncryptionStateEvent();
     ensureKeyProvider(e2ee);
     wireEncryptionKeys(rtc);
+    if (e2ee) wireKeyCompat(rtc);
 
     const r = new LkRoom({
       adaptiveStream: true,
@@ -478,13 +616,9 @@ export async function joinVoice(roomId: string) {
       return;
     }
 
-    const { muted } = useVoice.getState();
-    try {
-      await r.localParticipant.setMicrophoneEnabled(!muted);
-    } catch (e) {
-      console.warn("Microfone indisponível", e);
-      useVoice.setState({ muted: true });
-    }
+    // Sem isto o LiveKit publica nossas faixas SEM criptografia (Encryption_Type.NONE),
+    // mesmo com o keyProvider configurado: as opções de e2ee só preparam o worker.
+    if (e2ee) await r.setE2EEEnabled(true);
 
     rtc.join(
       { userId: c.getUserId()!, deviceId: c.getDeviceId()!, memberId: `${c.getUserId()}:${c.getDeviceId()}` },
@@ -497,6 +631,22 @@ export async function joinVoice(roomId: string) {
     );
     // Chaves distribuídas/recebidas antes deste ponto do fluxo
     if (e2ee) rtc.reemitEncryptionKeys();
+
+    const { muted } = useVoice.getState();
+    try {
+      await r.localParticipant.setMicrophoneEnabled(!muted);
+    } catch (e) {
+      console.warn("Microfone indisponível", e);
+      useVoice.setState({ muted: true });
+    }
+
+    if (e2ee) {
+      console.debug(
+        "[e2ee] identidades livekit: local=%s remotas=",
+        r.localParticipant.identity,
+        [...r.remoteParticipants.keys()],
+      );
+    }
 
     for (const p of r.remoteParticipants.values()) initRemote(p);
     useVoice.setState({ status: "connected", audioBlocked: !r.canPlaybackAudio, encrypted: e2ee });
@@ -673,6 +823,12 @@ function wireRoom(r: LkRoom) {
     })
     .on(RoomEvent.Disconnected, () => {
       if (lk === r) void leaveVoice(true);
+    })
+    .on(RoomEvent.EncryptionError, (err, p) => {
+      console.error("[e2ee] erro de criptografia de mídia", p?.identity ?? "(local)", err);
+    })
+    .on(RoomEvent.ParticipantEncryptionStatusChanged, (enabled, p) => {
+      console.debug("[e2ee] criptografia", enabled ? "ativa" : "inativa", "para", p?.identity);
     });
 }
 
