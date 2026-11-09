@@ -19,6 +19,26 @@ Abra http://localhost:5173 e entre com qualquer conta Matrix (ex.: `matrix.org`)
 - `npm run typecheck` — checa os tipos
 - `http://localhost:5173/?preview=appearance` — (só em dev) abre a tela de Aparência sem login, útil para mexer no visual
 
+## App para Windows (Tauri) — recomendado
+
+Usa o WebView2 que já vem no Windows 10/11: instalador de poucos MB.
+
+Pré-requisitos (uma vez só): [Rust](https://rustup.rs) (`winget install Rustlang.Rustup`) e as ferramentas de C++ do Visual Studio (“Desenvolvimento para desktop com C++”).
+
+```bash
+npm run tauri:build
+```
+
+Gera em `src-tauri/target/release/bundle/`:
+
+- `nsis/Glitch_<versão>_x64-setup.exe` — instalador (instala só para o usuário, sem pedir administrador)
+- `msi/Glitch_<versão>_x64_pt-BR.msi` — instalador MSI
+- o executável solto fica em `src-tauri/target/release/glitch.exe`
+
+`npm run tauri:dev` abre o app apontando para o `npm run dev` (recarrega ao salvar).
+
+Detalhes: uma instância só, links abrem no navegador padrão (`src/desktop.ts`), atalhos de zoom (Ctrl +/−/0), e o compartilhamento de tela usa o seletor do próprio WebView2. Os dados ficam em `%LOCALAPPDATA%\app.glitch.desktop`.
+
 ## App para Windows (Electron)
 
 ```bash
@@ -42,26 +62,82 @@ Detalhes (em `electron/`):
 
 ## App para Linux
 
-Os pacotes de Linux precisam ser gerados **num Linux** (ou no WSL do Windows).
+Os pacotes de Linux precisam ser gerados **num Linux** (ou no WSL do Windows). Há duas opções:
+
+| | Tauri | Electron |
+| --- | --- | --- |
+| Tamanho do pacote | ~5 MB | ~100 MB |
+| Motor | WebKitGTK do sistema | Chromium embutido |
+| Chamadas de voz/vídeo e transmissões | ⚠️ dependem do WebRTC do WebKitGTK, que a maioria das distribuições compila **desligado** | ✅ funcionam como no Chrome |
+| Formatos | `.deb`, `.rpm`, AppImage | `.deb`, `.rpm`, AppImage, `.tar.gz` |
+
+**Resumo:** use o **Electron** se for usar chamadas e transmissões no Linux; o **Tauri** serve bem para chat (mensagens, figurinhas, servidores).
+
+### Passos comuns
 
 ```bash
-# 1. Node.js 22 ou mais novo (ex.: via nvm)
+# 1. Levar o código (no Windows: git bundle create glitch.bundle --all; copie o arquivo)
+git clone glitch.bundle glitch && cd glitch
+
+# 2. Node.js 22 ou mais novo (ex.: via nvm)
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source ~/.bashrc && nvm install --lts
 
-# 2. Dependências do projeto
-cd glitch
+# 3. Dependências do projeto
 npm ci
+```
 
-# 3. Gerar os pacotes (AppImage, .deb, .rpm e .tar.gz em release/)
+### Opção 1 — Tauri
+
+Dependências de sistema (uma vez só):
+
+```bash
+# Debian / Ubuntu / Mint / Pop!_OS
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+# Fedora
+sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel
+sudo dnf group install "c-development"
+
+# Arch / Manjaro
+sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg xdotool
+
+# Rust (todas as distribuições)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+Para as chamadas terem chance de funcionar, instale também os plugins do GStreamer (Debian/Ubuntu: `sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-nice`).
+
+Compilar:
+
+```bash
+npm run tauri:build
+```
+
+Os pacotes ficam em `src-tauri/target/release/bundle/`:
+
+| Distribuição | Comando |
+| --- | --- |
+| Debian, Ubuntu, Mint, Pop!\_OS | `sudo apt install ./src-tauri/target/release/bundle/deb/Glitch_0.1.0_amd64.deb` |
+| Fedora, openSUSE | `sudo dnf install ./src-tauri/target/release/bundle/rpm/Glitch-0.1.0-1.x86_64.rpm` |
+| Qualquer uma (AppImage) | `chmod +x src-tauri/target/release/bundle/appimage/Glitch_0.1.0_amd64.AppImage` e execute |
+
+- Só um formato: `npm run tauri:build -- --bundles deb` (ou `rpm`, `appimage`).
+- Desinstalar: `sudo apt remove glitch` ou `sudo dnf remove glitch`. Os dados ficam em `~/.local/share/app.glitch.desktop`.
+
+### Opção 2 — Electron
+
+```bash
 npm run dist:linux
 ```
+
+Gera AppImage, `.deb`, `.rpm` e `.tar.gz` em `release/`.
 
 - Só alguns formatos: `npm run build && npx electron-builder --linux deb AppImage`
 - O `.rpm` precisa do `rpmbuild` (Debian/Ubuntu: `sudo apt install rpm`; Fedora: `sudo dnf install rpm-build`).
 - ARM (ex.: Raspberry Pi): acrescente `--arm64`.
-
-Instalar:
 
 | Distribuição | Comando |
 | --- | --- |
@@ -153,6 +229,10 @@ src/
   voice/       MatrixRTC + LiveKit (voice.ts), memberships, sons
   store/       estado da UI e configurações (zustand, salvas no localStorage)
   components/  interface (barra de servidores, canais, chat, chamada, modais)
+  desktop.ts   integração com o app Tauri (links externos)
+src-tauri/     app de desktop em Tauri (Rust): configuração, ícones, instaladores
+electron/      app de desktop em Electron: processo principal e seletor de tela
+build/         ícone usado pelos instaladores do Electron
 ```
 
 ## Limitações conhecidas
@@ -162,9 +242,13 @@ src/
 - Conecta só ao SFU de quem iniciou a chamada (cenário multi-SFU entre servidores diferentes ainda não é suportado).
 - Login por senha e SSO; o login OIDC nativo (MAS) ainda não foi implementado.
 
-## Próximo passo: instalável
+## Tauri ou Electron?
 
-O app é 100% front-end, então pode ser empacotado sem mudanças grandes:
+| | Tauri | Electron |
+| --- | --- | --- |
+| Windows | ✅ instalador de ~4 MB, WebView2 (Chromium do sistema) | ✅ ~110 MB |
+| Linux | chat ✅, chamadas ⚠️ (WebKitGTK) | ✅ tudo |
+| Seletor de tela | do WebView2 / sistema | próprio (Windows) / sistema (Wayland) |
+| Áudio do sistema na transmissão | depende do seletor do WebView2 (não testado) | ✅ (Windows) |
 
-- **Tauri** (recomendado): instalador pequeno (~10 MB), usa o WebView2 do Windows.
-- **Electron**: maior (~100 MB), mas com Chromium embutido — comportamento de WebRTC/compartilhamento de tela idêntico ao Chrome e acesso fácil a atalhos globais (push-to-talk) e captura de áudio do sistema.
+No Windows, o **Tauri** é a melhor escolha. No Linux, prefira o **Electron** se usar chamadas.
