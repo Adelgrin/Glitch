@@ -1,5 +1,7 @@
 import {
+  BaseKeyProvider,
   ConnectionState,
+  ConnectionQuality,
   Room as LkRoom,
   RoomEvent,
   Track,
@@ -12,13 +14,21 @@ import {
   type VideoResolution,
 } from "livekit-client";
 import { KnownMembership } from "matrix-js-sdk";
-import type { MatrixRTCSession, Transport, CallMembership } from "matrix-js-sdk/lib/matrixrtc";
+import {
+  MatrixRTCSessionEvent,
+  type CallMembership,
+  type MatrixRTCSession,
+  type Transport,
+} from "matrix-js-sdk/lib/matrixrtc";
+import type { CallMembershipIdentityParts } from "matrix-js-sdk/lib/matrixrtc/EncryptionManager";
 import { create } from "zustand";
 import { getClient } from "../matrix/client";
 import { getMyCallColor, useProfileStyles } from "../matrix/profileStyle";
 import { serverName } from "../matrix/rooms";
 import { useSettings } from "../store/settings";
 import { sounds } from "./sounds";
+import e2eeWorkerUrl from "livekit-client/e2ee-worker?worker&url";
+import { nativeConnect, nativeLeave, nativeSetDeafened, nativeSetMicMuted, nativeSetVolumes, nativeVoiceAvailable } from "./native";
 
 export const VOICE_STATE_KEY = "com.matrixcord.voice";
 const SLOT_ID = "m.call#ROOM";
@@ -50,6 +60,37 @@ interface VoiceStore {
   focused: string | null;
   audioBlocked: boolean;
   ping: number | null;
+  /** mídia criptografada ponta a ponta (sala Matrix criptografada) */
+  encrypted: boolean;
+  /** qualidade do downlink por identidade (0 desconhecido, 1 ruim, 2 boa, 3 ótima) */
+  quality: Record<string, number>;
+}
+
+/** Qualidade do downlink (LiveKit) -> nível numérico para os indicadores. */
+export function qualityLevel(q: ConnectionQuality): number {
+  switch (q) {
+    case ConnectionQuality.Excellent:
+      return 3;
+    case ConnectionQuality.Good:
+      return 2;
+    case ConnectionQuality.Poor:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+export interface DownlinkStats {
+  /** jitter médio em ms (áudio + vídeo) */
+  jitterMs: number;
+  /** perda de pacotes em % (áudio + vídeo) */
+  lossPct: number;
+  /** bitrate recebido total em kbps */
+  kbps: number;
+  /** quadros de vídeo descartados (acumulado) */
+  framesDropped: number;
+  /** codec de vídeo em uso, quando disponível */
+  videoCodec: string | null;
 }
 
 export const useVoice = create<VoiceStore>(() => ({
@@ -65,9 +106,13 @@ export const useVoice = create<VoiceStore>(() => ({
   focused: null,
   audioBlocked: false,
   ping: null,
+  encrypted: false,
+  quality: {},
 }));
 
 let lk: LkRoom | null = null;
+let nativeActive = false;
+let nativePrevIds: Set<string> | null = null;
 let session: MatrixRTCSession | null = null;
 let audioHost: HTMLDivElement | null = null;
 let mutedBeforeDeafen = false;
@@ -174,6 +219,48 @@ function resolveUserId(identity: string): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* E2EE de mídia (MSC4268) — interoperável com Element Call/Cinny      */
+/*                                                                     */
+/* Em salas criptografadas, quem publica cifra os frames no navegador  */
+/* e distribui as chaves via eventos Matrix. O LiveKit recebe apenas   */
+/* dados cifrados: sem isto, a mídia de clientes que cifram chega      */
+/* "quebrada" (frames cifrados sendo decodificados como VP8/Opus).     */
+/* ------------------------------------------------------------------ */
+
+/** KeyProvider com uma chave por participante (o padrão do livekit só tem chave única compartilhada). */
+class ParticipantKeyProvider extends BaseKeyProvider {
+  setKey(key: Uint8Array, participantIdentity: string, keyIndex = 0) {
+    this.onSetEncryptionKey(key as unknown as CryptoKey, participantIdentity, keyIndex);
+  }
+}
+
+let keyProvider: ParticipantKeyProvider | null = null;
+
+const onEncryptionKeyChanged = (
+  key: Uint8Array,
+  encryptionKeyIndex: number,
+  _membership: CallMembershipIdentityParts,
+  backendIdentity: string,
+) => {
+  if (!keyProvider || !backendIdentity) return;
+  keyProvider.setKey(key, backendIdentity, encryptionKeyIndex);
+};
+
+function ensureKeyProvider(enabled: boolean) {
+  keyProvider = enabled ? new ParticipantKeyProvider({ sharedKey: false }) : null;
+  return keyProvider;
+}
+
+function wireEncryptionKeys(rtc: MatrixRTCSession) {
+  rtc.on(MatrixRTCSessionEvent.EncryptionKeyChanged, onEncryptionKeyChanged);
+}
+
+function unwireEncryptionKeys(rtc: MatrixRTCSession | null) {
+  rtc?.off(MatrixRTCSessionEvent.EncryptionKeyChanged, onEncryptionKeyChanged);
+  keyProvider = null;
+}
+
+/* ------------------------------------------------------------------ */
 /* Estado                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -203,6 +290,17 @@ function refresh() {
 }
 
 function applyVolumes() {
+  if (nativeActive) {
+    const { participants, deafened } = useVoice.getState();
+    const { userVolumes } = useSettings.getState().voice;
+    const volumes: Record<string, number> = {};
+    for (const p of participants) {
+      if (p.isLocal) continue;
+      volumes[p.identity] = deafened ? 0 : (userVolumes[p.userId] ?? 100) / 100;
+    }
+    void nativeSetVolumes(volumes);
+    return;
+  }
   if (!lk) return;
   const { deafened } = useVoice.getState();
   const { userVolumes, streamVolumes } = useSettings.getState().voice;
@@ -300,9 +398,12 @@ export async function joinVoice(roomId: string) {
     focused: null,
     cameraOn: false,
     screenOn: false,
+    encrypted: false,
+    quality: {},
   });
 
   const c = getClient();
+  let rtc: MatrixRTCSession | null = null;
   try {
     let room = c.getRoom(roomId);
     if (!room || room.getMyMembership() !== KnownMembership.Join) {
@@ -311,7 +412,7 @@ export async function joinVoice(roomId: string) {
     }
     if (!room) throw new Error("Sala não encontrada");
 
-    const rtc = c.matrixRTC.getRoomSession(room);
+    rtc = c.matrixRTC.getRoomSession(room);
     await rtc.initialMembershipCalculated.catch(() => undefined);
 
     // Usa o SFU de quem já está na chamada (compatível com Element Call); se falhar, o nosso.
@@ -337,11 +438,24 @@ export async function joinVoice(roomId: string) {
     if (!cfg || !transport) throw lastErr ?? new Error("Não foi possível obter acesso à chamada.");
     if (seq !== joinSeq) return;
 
+    // WebKitGTK (Tauri/Linux) não tem WebRTC: usa o cliente nativo em Rust
+    if (nativeVoiceAvailable()) {
+      await joinNative(rtc, roomId, transport, cfg, seq);
+      return;
+    }
+
     const v = useSettings.getState().voice;
+
+    // Mídia criptografada ponta a ponta quando a sala Matrix é criptografada
+    // (mesmo critério de Element Call/Cinny — MSC4268).
+    const e2ee = room.hasEncryptionStateEvent();
+    ensureKeyProvider(e2ee);
+    wireEncryptionKeys(rtc);
+
     const r = new LkRoom({
       adaptiveStream: true,
       dynacast: true,
-      webAudioMix: true,
+      webAudioMix: v.webAudioMix,
       audioCaptureDefaults: {
         deviceId: v.inputDeviceId || "default",
         echoCancellation: v.echoCancellation,
@@ -350,6 +464,9 @@ export async function joinVoice(roomId: string) {
       },
       audioOutput: { deviceId: v.outputDeviceId || "default" },
       videoCaptureDefaults: { resolution: VideoPresets.h720.resolution },
+      e2ee: e2ee
+        ? { keyProvider: keyProvider!, worker: new Worker(e2eeWorkerUrl, { type: "module" }) }
+        : undefined,
     });
     lk = r;
     session = rtc;
@@ -374,21 +491,109 @@ export async function joinVoice(roomId: string) {
       [{ ...transport, ...(transport.livekit_service_url ? { livekit_alias: roomId } : {}) }],
       {
         callIntent: "audio",
-        manageMediaKeys: false,
+        manageMediaKeys: e2ee,
         applicationData: voiceAppData(),
       },
     );
+    // Chaves distribuídas/recebidas antes deste ponto do fluxo
+    if (e2ee) rtc.reemitEncryptionKeys();
 
     for (const p of r.remoteParticipants.values()) initRemote(p);
-    useVoice.setState({ status: "connected", audioBlocked: !r.canPlaybackAudio });
+    useVoice.setState({ status: "connected", audioBlocked: !r.canPlaybackAudio, encrypted: e2ee });
     refresh();
     applyVolumes();
     sounds.join();
   } catch (e) {
     console.error(e);
     if (seq !== joinSeq) return;
+    unwireEncryptionKeys(rtc);
     lk?.disconnect();
     lk = null;
+    session = null;
+    useVoice.setState({ status: "error", error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Caminho nativo (Tauri/Linux): o SDK Rust do LiveKit cuida da mídia
+ * (microfone + áudio remoto) e o front só mantém a membership MatrixRTC
+ * e reflete o estado recebido via eventos.
+ */
+async function joinNative(
+  rtc: MatrixRTCSession,
+  roomId: string,
+  transport: Transport,
+  cfg: SfuConfig,
+  seq: number,
+) {
+  nativeActive = true;
+  nativePrevIds = null;
+  session = rtc;
+  const c = getClient();
+  try {
+    const { muted } = useVoice.getState();
+    await nativeConnect(cfg.url, cfg.jwt, muted, (e) => {
+      if (e.type === "snapshot") {
+        const participants: VParticipant[] = [];
+        if (e.local.identity) {
+          participants.push({
+            identity: e.local.identity,
+            userId: c.getUserId()!,
+            isLocal: true,
+            speaking: e.local.speaking,
+            micMuted: e.local.micMuted,
+          });
+        }
+        for (const np of e.participants) {
+          participants.push({
+            identity: np.identity,
+            userId: resolveUserId(np.identity),
+            isLocal: false,
+            speaking: np.speaking,
+            micMuted: np.micMuted,
+          });
+        }
+        // Sons de entrada/saída (diff com o snapshot anterior)
+        const ids = new Set(e.participants.map((np) => np.identity));
+        if (nativePrevIds) {
+          for (const id of ids) if (!nativePrevIds.has(id)) sounds.otherJoin();
+          for (const id of nativePrevIds) if (!ids.has(id)) sounds.otherLeave();
+        }
+        nativePrevIds = ids;
+        useVoice.setState({
+          participants,
+          quality: e.quality,
+          error: e.status === "reconnecting" ? "Reconectando…" : null,
+        });
+      } else if (e.type === "disconnected") {
+        if (!e.expected) void leaveVoice(true);
+      } else {
+        useVoice.setState({ error: e.message });
+      }
+    });
+    if (seq !== joinSeq) {
+      nativeActive = false;
+      void nativeLeave();
+      return;
+    }
+
+    rtc.join(
+      { userId: c.getUserId()!, deviceId: c.getDeviceId()!, memberId: `${c.getUserId()}:${c.getDeviceId()}` },
+      [{ ...transport, ...(transport.livekit_service_url ? { livekit_alias: roomId } : {}) }],
+      {
+        callIntent: "audio",
+        manageMediaKeys: false,
+        applicationData: voiceAppData(),
+      },
+    );
+
+    useVoice.setState({ status: "connected", audioBlocked: false, error: null });
+    sounds.join();
+    applyVolumes();
+  } catch (e) {
+    console.error(e);
+    if (seq !== joinSeq) return;
+    nativeActive = false;
     session = null;
     useVoice.setState({ status: "error", error: e instanceof Error ? e.message : String(e) });
   }
@@ -458,6 +663,9 @@ function wireRoom(r: LkRoom) {
       refresh();
     })
     .on(RoomEvent.ActiveSpeakersChanged, refresh)
+    .on(RoomEvent.ConnectionQualityChanged, (q, p) => {
+      useVoice.setState({ quality: { ...useVoice.getState().quality, [p.identity]: qualityLevel(q) } });
+    })
     .on(RoomEvent.AudioPlaybackStatusChanged, () => useVoice.setState({ audioBlocked: !r.canPlaybackAudio }))
     .on(RoomEvent.ConnectionStateChanged, (st) => {
       if (st === ConnectionState.Reconnecting) useVoice.setState({ error: "Reconectando…" });
@@ -482,11 +690,17 @@ function syncLocalFlags() {
 
 export async function leaveVoice(silent = false) {
   joinSeq++;
+  if (nativeActive) {
+    nativeActive = false;
+    nativePrevIds = null;
+    void nativeLeave();
+  }
   const r = lk;
   const s = session;
   lk = null;
   session = null;
   window.clearTimeout(appDataTimer);
+  unwireEncryptionKeys(s);
   useVoice.setState({
     status: "idle",
     roomId: null,
@@ -496,7 +710,10 @@ export async function leaveVoice(silent = false) {
     cameraOn: false,
     screenOn: false,
     error: null,
+    encrypted: false,
+    quality: {},
   });
+  prevStats = null;
   if (audioHost) audioHost.innerHTML = "";
   if (!silent) sounds.leave();
   try {
@@ -521,6 +738,17 @@ export async function toggleMute() {
   }
   useVoice.setState({ muted });
   muted ? sounds.mute() : sounds.unmute();
+  if (nativeActive) {
+    try {
+      await nativeSetMicMuted(muted);
+    } catch (e) {
+      console.warn(e);
+      useVoice.setState({ muted: true });
+    }
+    refresh();
+    scheduleAppDataUpdate();
+    return;
+  }
   if (lk) {
     try {
       await lk.localParticipant.setMicrophoneEnabled(!muted);
@@ -545,6 +773,10 @@ export async function toggleDeafen() {
     sounds.unmute();
   }
   applyVolumes();
+  if (nativeActive) {
+    await nativeSetDeafened(deafened).catch(() => undefined);
+    return;
+  }
   if (lk) {
     try {
       await lk.localParticipant.setMicrophoneEnabled(!useVoice.getState().muted);
@@ -557,6 +789,10 @@ export async function toggleDeafen() {
 }
 
 export async function toggleCamera() {
+  if (nativeActive) {
+    alert("Câmera ainda não é suportada no modo nativo de chamada.");
+    return;
+  }
   if (!lk) return;
   const on = !useVoice.getState().cameraOn;
   const v = useSettings.getState().voice;
@@ -580,6 +816,10 @@ const RESOLUTIONS: Record<string, VideoResolution> = {
 };
 
 export async function toggleScreenShare(force?: boolean) {
+  if (nativeActive) {
+    alert("Compartilhar a tela ainda não é suportado no modo nativo de chamada.");
+    return;
+  }
   if (!lk) return;
   const on = force ?? !useVoice.getState().screenOn;
   const v = useSettings.getState().voice;
@@ -643,6 +883,11 @@ export function setStreamVolume(userId: string, vol: number) {
 }
 
 export async function switchDevice(kind: MediaDeviceKind, deviceId: string) {
+  if (nativeActive) {
+    // IDs da webview (enumerateDevices) não correspondem aos do áudio nativo
+    console.warn("Troca de dispositivo ainda não suportada no modo nativo de chamada");
+    return;
+  }
   if (!lk) return;
   try {
     await lk.switchActiveDevice(kind, deviceId);
@@ -652,8 +897,68 @@ export async function switchDevice(kind: MediaDeviceKind, deviceId: string) {
 }
 
 export async function resumeAudio() {
+  if (nativeActive) return; // não há autoplay block fora da webview
   await lk?.startAudio();
   useVoice.setState({ audioBlocked: false });
+}
+
+let prevStats: { time: number; bytes: number } | null = null;
+
+/**
+ * Estatísticas agregadas do downlink (SFU -> este cliente), lidas do RTCPeerConnection
+ * de recepção. Perda alta/jitter alto aqui = problema de rede entre o SFU e você.
+ */
+export async function getDownlinkStats(): Promise<DownlinkStats | null> {
+  if (!lk) return null;
+  try {
+    const report = await lk.engine?.pcManager?.subscriber?.getStats?.();
+    if (!report) return null;
+
+    let jitterSum = 0;
+    let jitterCount = 0;
+    let packetsLost = 0;
+    let packetsReceived = 0;
+    let bytes = 0;
+    let framesDropped = 0;
+    let videoCodec: string | null = null;
+    const codecs = new Map<string, string>();
+    for (const raw of report.values()) {
+      const s = raw as Record<string, any>;
+      if (s.type === "codec") {
+        if (typeof s.mimeType === "string") codecs.set(s.id, s.mimeType);
+      } else if (s.type === "inbound-rtp" && !s.isRemote) {
+        jitterSum += s.jitter ?? 0;
+        jitterCount++;
+        packetsLost += Math.max(0, s.packetsLost ?? 0);
+        packetsReceived += s.packetsReceived ?? 0;
+        bytes += s.bytesReceived ?? 0;
+        if (s.kind === "video") {
+          framesDropped += s.framesDropped ?? 0;
+          if (s.codecId) {
+            const mime = codecs.get(s.codecId) ?? "";
+            if (mime) videoCodec = mime.split("/")[1] ?? mime;
+          }
+        }
+      }
+    }
+
+    const now = performance.now();
+    let kbps = 0;
+    if (prevStats && now > prevStats.time) {
+      kbps = Math.max(0, (bytes - prevStats.bytes) / ((now - prevStats.time) / 1000) / 125);
+    }
+    prevStats = { time: now, bytes };
+
+    return {
+      jitterMs: jitterCount ? (jitterSum / jitterCount) * 1000 : 0,
+      lossPct: packetsReceived + packetsLost ? (packetsLost / (packetsReceived + packetsLost)) * 100 : 0,
+      kbps,
+      framesDropped,
+      videoCodec,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function getLocalIdentity(): string | undefined {
@@ -673,6 +978,7 @@ useSettings.subscribe((s, prev) => {
 
 window.addEventListener("beforeunload", () => {
   if (session) void session.leave(1000);
+  if (nativeActive) void nativeLeave();
   lk?.disconnect();
 });
 
