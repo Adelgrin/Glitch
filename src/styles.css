@@ -4031,3 +4031,33 @@ input[type="color"]::-moz-color-swatch {
 .rail-item.active .rail-home.logo {
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+/* Chamada: filtro "só quem tem vídeo" */
+.call-hide-novideo {
+  position: relative;
+}
+.call-hidden-count {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--bg2, #2b2d31);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.call-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted, #949ba4);
+  text-align: center;
+}

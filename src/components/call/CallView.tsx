@@ -55,6 +55,12 @@ interface TileData {
   p: VParticipant;
 }
 
+/** O bloco tem vídeo publicado agora (câmera ligada ou transmissão de tela)? */
+function tileHasVideo(t: TileData): boolean {
+  const pub = t.kind === "screen" ? t.p.screen : t.p.camera;
+  return !!pub && !pub.isMuted;
+}
+
 export default function CallView({ room }: { room: Room }) {
   const status = useVoice((s) => s.status);
   const voiceRoomId = useVoice((s) => s.roomId);
@@ -64,6 +70,8 @@ export default function CallView({ room }: { room: Room }) {
   const error = useVoice((s) => s.error);
   const encrypted = useVoice((s) => s.encrypted);
   const debugStats = useSettings((s) => s.voice.debugStats);
+  const hideNoVideo = useSettings((s) => s.voice.hideNoVideo);
+  const setVoice = useSettings((s) => s.setVoice);
   const rtcMembers = useRtcMembers(room);
   const [showChat, setShowChat] = useState(false);
   const connectedHere = voiceRoomId === room.roomId && status !== "idle";
@@ -74,7 +82,11 @@ export default function CallView({ room }: { room: Room }) {
   }
   for (const p of participants) tiles.push({ key: tileKey(p.identity, "camera"), kind: "camera", p });
   const liveUsers = new Set(participants.map((p) => p.userId));
-  const ghosts = rtcMembers.filter((m) => !liveUsers.has(m.userId));
+  const allGhosts = rtcMembers.filter((m) => !liveUsers.has(m.userId));
+  // Modo "só vídeo": esconde blocos sem câmera/transmissão para caber mais lives na tela
+  const visibleTiles = hideNoVideo ? tiles.filter(tileHasVideo) : tiles;
+  const ghosts = hideNoVideo ? [] : allGhosts;
+  const hiddenCount = tiles.length - visibleTiles.length + allGhosts.length - ghosts.length;
   const focusTile = focused ? tiles.find((t) => t.key === focused) : undefined;
 
   return (
@@ -89,6 +101,20 @@ export default function CallView({ room }: { room: Room }) {
             </span>
           )}
           <span className="flex-spacer" />
+          {connectedHere && (
+            <button
+              className={`icon-btn call-hide-novideo ${hideNoVideo ? "active" : ""}`}
+              title={
+                hideNoVideo
+                  ? `Mostrar todos os participantes${hiddenCount ? ` (${hiddenCount} oculto${hiddenCount > 1 ? "s" : ""})` : ""}`
+                  : "Ocultar participantes sem vídeo"
+              }
+              onClick={() => setVoice({ hideNoVideo: !hideNoVideo })}
+            >
+              {hideNoVideo ? <IconVideo /> : <IconVideoOff />}
+              {hideNoVideo && hiddenCount > 0 && <span className="call-hidden-count">{hiddenCount}</span>}
+            </button>
+          )}
           {connectedHere && focusTile && (
             <button className="icon-btn" title="Voltar à grade" onClick={() => setFocused(null)}>
               <IconGrid />
@@ -117,16 +143,24 @@ export default function CallView({ room }: { room: Room }) {
                 <Tile tile={focusTile} room={room} focused />
               </div>
               <div className="focus-strip">
-                {tiles
+                {visibleTiles
                   .filter((t) => t.key !== focusTile.key)
                   .map((t) => (
                     <Tile key={t.key} tile={t} room={room} small />
                   ))}
               </div>
             </>
+          ) : visibleTiles.length + ghosts.length === 0 ? (
+            <div className="call-empty">
+              <IconVideoOff size={40} />
+              <p>Ninguém está com câmera ou transmissão ligada agora.</p>
+              <button className="btn secondary" onClick={() => setVoice({ hideNoVideo: false })}>
+                Mostrar todos os participantes
+              </button>
+            </div>
           ) : (
-            <div className={`tile-grid n${Math.min(tiles.length + ghosts.length, 9)}`}>
-              {tiles.map((t) => (
+            <div className={`tile-grid n${Math.min(visibleTiles.length + ghosts.length, 9)}`}>
+              {visibleTiles.map((t) => (
                 <Tile key={t.key} tile={t} room={room} />
               ))}
               {ghosts.map((g) => (

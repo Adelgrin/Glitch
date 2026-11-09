@@ -686,6 +686,10 @@ function VoiceVideo() {
         <input type="checkbox" checked={v.autoWatchStreams} onChange={(e) => set({ autoWatchStreams: e.target.checked })} />
         Assistir transmissões de tela automaticamente (desligado = você escolhe quais assistir)
       </label>
+      <label className="check">
+        <input type="checkbox" checked={v.hideNoVideo} onChange={(e) => set({ hideNoVideo: e.target.checked })} />
+        Ocultar participantes sem vídeo na chamada (mostra só câmeras e transmissões)
+      </label>
 
       <h3>Sua transmissão de tela</h3>
       <div className="field-label">Resolução</div>

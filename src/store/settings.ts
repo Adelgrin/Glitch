@@ -117,6 +117,8 @@ export interface VoiceSettings {
   webAudioMix: boolean;
   /** Mostra perda de pacotes/jitter/bitrate da recepção durante a chamada */
   debugStats: boolean;
+  /** Na chamada, mostra só os blocos com vídeo (câmera ligada ou transmissão de tela) */
+  hideNoVideo: boolean;
 }
 
 export interface AdvancedSettings {
@@ -174,6 +176,7 @@ const defaultVoice: VoiceSettings = {
   streamVolumes: {},
   webAudioMix: false,
   debugStats: false,
+  hideNoVideo: false,
 };
 
 export const useSettings = create<SettingsState>()(
