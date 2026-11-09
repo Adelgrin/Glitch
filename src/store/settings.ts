@@ -109,6 +109,16 @@ export interface VoiceSettings {
   /** volume por usuário (0–200) */
   userVolumes: Record<string, number>;
   streamVolumes: Record<string, number>;
+  /**
+   * Mistura o áudio remoto via Web Audio (padrão do LiveKit). Em alguns sistemas
+   * (Linux/Electron, sample rate do AudioContext diferente do hardware) gera áudio
+   * "quebrado/robótico" — desligado, o áudio vai direto pelo elemento <audio>.
+   */
+  webAudioMix: boolean;
+  /** Mostra perda de pacotes/jitter/bitrate da recepção durante a chamada */
+  debugStats: boolean;
+  /** Na chamada, mostra só os blocos com vídeo (câmera ligada ou transmissão de tela) */
+  hideNoVideo: boolean;
 }
 
 export interface AdvancedSettings {
@@ -164,6 +174,9 @@ const defaultVoice: VoiceSettings = {
   screenAudio: true,
   userVolumes: {},
   streamVolumes: {},
+  webAudioMix: false,
+  debugStats: false,
+  hideNoVideo: false,
 };
 
 export const useSettings = create<SettingsState>()(

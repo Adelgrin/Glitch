@@ -1,5 +1,7 @@
 import {
+  BaseKeyProvider,
   ConnectionState,
+  ConnectionQuality,
   Room as LkRoom,
   RoomEvent,
   Track,
@@ -11,14 +13,22 @@ import {
   type TrackPublication,
   type VideoResolution,
 } from "livekit-client";
-import { KnownMembership } from "matrix-js-sdk";
-import type { MatrixRTCSession, Transport, CallMembership } from "matrix-js-sdk/lib/matrixrtc";
+import { ClientEvent, KnownMembership, type MatrixEvent } from "matrix-js-sdk";
+import {
+  MatrixRTCSessionEvent,
+  type CallMembership,
+  type MatrixRTCSession,
+  type Transport,
+} from "matrix-js-sdk/lib/matrixrtc";
+import type { CallMembershipIdentityParts } from "matrix-js-sdk/lib/matrixrtc/EncryptionManager";
 import { create } from "zustand";
 import { getClient } from "../matrix/client";
 import { getMyCallColor, useProfileStyles } from "../matrix/profileStyle";
 import { serverName } from "../matrix/rooms";
 import { useSettings } from "../store/settings";
 import { sounds } from "./sounds";
+import e2eeWorkerUrl from "livekit-client/e2ee-worker?worker&url";
+import { nativeConnect, nativeLeave, nativeSetDeafened, nativeSetMicMuted, nativeSetVolumes, nativeVoiceAvailable } from "./native";
 
 export const VOICE_STATE_KEY = "com.matrixcord.voice";
 const SLOT_ID = "m.call#ROOM";
@@ -50,6 +60,37 @@ interface VoiceStore {
   focused: string | null;
   audioBlocked: boolean;
   ping: number | null;
+  /** mídia criptografada ponta a ponta (sala Matrix criptografada) */
+  encrypted: boolean;
+  /** qualidade do downlink por identidade (0 desconhecido, 1 ruim, 2 boa, 3 ótima) */
+  quality: Record<string, number>;
+}
+
+/** Qualidade do downlink (LiveKit) -> nível numérico para os indicadores. */
+export function qualityLevel(q: ConnectionQuality): number {
+  switch (q) {
+    case ConnectionQuality.Excellent:
+      return 3;
+    case ConnectionQuality.Good:
+      return 2;
+    case ConnectionQuality.Poor:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+export interface DownlinkStats {
+  /** jitter médio em ms (áudio + vídeo) */
+  jitterMs: number;
+  /** perda de pacotes em % (áudio + vídeo) */
+  lossPct: number;
+  /** bitrate recebido total em kbps */
+  kbps: number;
+  /** quadros de vídeo descartados (acumulado) */
+  framesDropped: number;
+  /** codec de vídeo em uso, quando disponível */
+  videoCodec: string | null;
 }
 
 export const useVoice = create<VoiceStore>(() => ({
@@ -65,9 +106,13 @@ export const useVoice = create<VoiceStore>(() => ({
   focused: null,
   audioBlocked: false,
   ping: null,
+  encrypted: false,
+  quality: {},
 }));
 
 let lk: LkRoom | null = null;
+let nativeActive = false;
+let nativePrevIds: Set<string> | null = null;
 let session: MatrixRTCSession | null = null;
 let audioHost: HTMLDivElement | null = null;
 let mutedBeforeDeafen = false;
@@ -174,6 +219,185 @@ function resolveUserId(identity: string): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* E2EE de mídia (MSC4268) — interoperável com Element Call/Cinny      */
+/*                                                                     */
+/* Em salas criptografadas, quem publica cifra os frames no navegador  */
+/* e distribui as chaves via eventos Matrix. O LiveKit recebe apenas   */
+/* dados cifrados: sem isto, a mídia de clientes que cifram chega      */
+/* "quebrada" (frames cifrados sendo decodificados como VP8/Opus).     */
+/* ------------------------------------------------------------------ */
+
+/** KeyProvider com uma chave por participante (o padrão do livekit só tem chave única compartilhada). */
+class ParticipantKeyProvider extends BaseKeyProvider {
+  constructor() {
+    // Mesmos parâmetros do Element Call: o matrix-js-sdk usa índices de chave 0..255
+    // (o keyring padrão do livekit tem só 16 posições).
+    super({ sharedKey: false, ratchetWindowSize: 10, keyringSize: 256 });
+  }
+
+  /**
+   * O worker de E2EE espera um CryptoKey HKDF (ele lê `material.algorithm.name`
+   * para derivar a chave AES-GCM). Passar o Uint8Array cru faz a derivação
+   * falhar e nenhum frame é cifrado/decifrado.
+   */
+  async setKey(key: Uint8Array, participantIdentity: string, keyIndex = 0) {
+    const material = await crypto.subtle.importKey("raw", key as BufferSource, "HKDF", false, [
+      "deriveBits",
+      "deriveKey",
+    ]);
+    this.onSetEncryptionKey(material, participantIdentity, keyIndex);
+  }
+}
+
+let keyProvider: ParticipantKeyProvider | null = null;
+
+const onEncryptionKeyChanged = (
+  key: Uint8Array,
+  encryptionKeyIndex: number,
+  membership: CallMembershipIdentityParts,
+  backendIdentity: string,
+) => {
+  if (!keyProvider) return;
+  // O backendIdentity das memberships novas (sticky events) é um hash sha256
+  // anonimizado, que pode não ser a identidade LiveKit real do participante
+  // (formato legado: "@user:server:device"). Registra a chave sob todas as
+  // identidades candidatas para garantir o casamento no worker de E2EE.
+  const mem = session?.memberships.find(
+    (m) => m.userId === membership.userId && m.deviceId === membership.deviceId,
+  );
+  const candidates = new Set<string>([backendIdentity, membership.memberId]);
+  if (mem) {
+    candidates.add(mem.memberId);
+    mem.backendIdentities?.forEach((id) => candidates.add(id));
+  }
+  console.debug(
+    `[e2ee] chave recebida idx=${encryptionKeyIndex} len=${key.length} identidades=`,
+    [...candidates],
+  );
+  for (const id of candidates) {
+    if (id)
+      keyProvider
+        .setKey(key, id, encryptionKeyIndex)
+        .catch((e) => console.error("[e2ee] falha ao importar chave", id, e));
+  }
+};
+
+function ensureKeyProvider(enabled: boolean) {
+  keyProvider = enabled ? new ParticipantKeyProvider() : null;
+  return keyProvider;
+}
+
+function wireEncryptionKeys(rtc: MatrixRTCSession) {
+  rtc.on(MatrixRTCSessionEvent.EncryptionKeyChanged, onEncryptionKeyChanged);
+}
+
+const CALL_KEYS_TYPE = "io.element.call.encryption_keys";
+
+/**
+ * Compatibilidade com o Element Call embutido no Cinny.
+ *
+ * O matrix-js-sdk 45 só aceita uma chave quando (userId, deviceId, memberId) da
+ * chave batem com uma membership. O Element Call do Cinny envia `member.id` com
+ * um UUID interno, mas publica a membership com `membershipID = user:device`.
+ * O SDK então estaciona a chave para sempre ("No matching RTC membership") e o
+ * áudio/vídeo dele chega mudo para nós.
+ *
+ * Aqui aplicamos a mesma regra do próprio Element Call: casar só por
+ * (userId, deviceId). Aceitamos apenas eventos que chegaram cifrados com Olm,
+ * e o userId vem do remetente verificado pelo Olm, não do conteúdo.
+ */
+interface PendingKey {
+  userId: string;
+  deviceId: string;
+  key: Uint8Array;
+  index: number;
+}
+let pendingKeys: PendingKey[] = [];
+let toDeviceListener: ((ev: MatrixEvent) => void) | null = null;
+let membershipsListener: (() => void) | null = null;
+let keyRtc: MatrixRTCSession | null = null;
+
+function b64ToBytes(b64: string): Uint8Array {
+  const norm = b64.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(norm + "=".repeat((4 - (norm.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Tenta aplicar a chave; devolve false se ainda não há membership para o dispositivo. */
+function applyKeyByDevice(k: PendingKey): boolean {
+  if (!keyProvider || !keyRtc) return true;
+  const mem = keyRtc.memberships.find((m) => m.userId === k.userId && m.deviceId === k.deviceId);
+  if (!mem) return false;
+  const ids = new Set<string>([`${k.userId}:${k.deviceId}`, ...(mem.backendIdentities ?? [])]);
+  for (const id of ids) {
+    keyProvider
+      .setKey(k.key, id, k.index)
+      .catch((e) => console.error("[e2ee] falha ao importar chave", id, e));
+  }
+  console.debug(`[e2ee] chave de ${k.userId}:${k.deviceId} idx=${k.index} aplicada em`, [...ids]);
+  return true;
+}
+
+function wireKeyCompat(rtc: MatrixRTCSession) {
+  unwireKeyCompat();
+  keyRtc = rtc;
+  const roomId = rtc.room.roomId;
+  const myUser = getClient().getUserId();
+  const myDevice = getClient().getDeviceId();
+
+  toDeviceListener = (ev: MatrixEvent) => {
+    if (ev.getType() !== CALL_KEYS_TYPE) return;
+    const sender = ev.getSender();
+    const c = ev.getContent();
+    const deviceId = c.member?.claimed_device_id;
+    const mk = c.media_key ?? c.keys;
+    // Só metadados no log, nunca o material da chave.
+    console.debug("[e2ee] to-device de chave:", {
+      de: sender,
+      wire: ev.getWireType(),
+      member_id: c.member_id ?? c.member?.id,
+      device: deviceId,
+      indice: mk?.index,
+    });
+    if (ev.getWireType() !== "m.room.encrypted") {
+      console.warn("[e2ee] chave de chamada SEM criptografia Olm de", sender, "— ignorada");
+      return;
+    }
+    if (!sender || c.room_id !== roomId || typeof deviceId !== "string") return;
+    if (sender === myUser && deviceId === myDevice) return;
+    if (!mk || typeof mk.key !== "string" || typeof mk.index !== "number") return;
+    const k: PendingKey = { userId: sender, deviceId, key: b64ToBytes(mk.key), index: mk.index };
+    if (!applyKeyByDevice(k)) pendingKeys.push(k);
+  };
+  getClient().on(ClientEvent.ToDeviceEvent, toDeviceListener);
+
+  membershipsListener = () => {
+    if (!pendingKeys.length) return;
+    const left = pendingKeys;
+    pendingKeys = [];
+    for (const k of left) if (!applyKeyByDevice(k)) pendingKeys.push(k);
+  };
+  rtc.on(MatrixRTCSessionEvent.MembershipsChanged, membershipsListener);
+}
+
+function unwireKeyCompat() {
+  if (toDeviceListener) getClient().off(ClientEvent.ToDeviceEvent, toDeviceListener);
+  if (membershipsListener) keyRtc?.off(MatrixRTCSessionEvent.MembershipsChanged, membershipsListener);
+  toDeviceListener = null;
+  membershipsListener = null;
+  keyRtc = null;
+  pendingKeys = [];
+}
+
+function unwireEncryptionKeys(rtc: MatrixRTCSession | null) {
+  rtc?.off(MatrixRTCSessionEvent.EncryptionKeyChanged, onEncryptionKeyChanged);
+  unwireKeyCompat();
+  keyProvider = null;
+}
+
+/* ------------------------------------------------------------------ */
 /* Estado                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -203,6 +427,17 @@ function refresh() {
 }
 
 function applyVolumes() {
+  if (nativeActive) {
+    const { participants, deafened } = useVoice.getState();
+    const { userVolumes } = useSettings.getState().voice;
+    const volumes: Record<string, number> = {};
+    for (const p of participants) {
+      if (p.isLocal) continue;
+      volumes[p.identity] = deafened ? 0 : (userVolumes[p.userId] ?? 100) / 100;
+    }
+    void nativeSetVolumes(volumes);
+    return;
+  }
   if (!lk) return;
   const { deafened } = useVoice.getState();
   const { userVolumes, streamVolumes } = useSettings.getState().voice;
@@ -300,9 +535,12 @@ export async function joinVoice(roomId: string) {
     focused: null,
     cameraOn: false,
     screenOn: false,
+    encrypted: false,
+    quality: {},
   });
 
   const c = getClient();
+  let rtc: MatrixRTCSession | null = null;
   try {
     let room = c.getRoom(roomId);
     if (!room || room.getMyMembership() !== KnownMembership.Join) {
@@ -311,7 +549,7 @@ export async function joinVoice(roomId: string) {
     }
     if (!room) throw new Error("Sala não encontrada");
 
-    const rtc = c.matrixRTC.getRoomSession(room);
+    rtc = c.matrixRTC.getRoomSession(room);
     await rtc.initialMembershipCalculated.catch(() => undefined);
 
     // Usa o SFU de quem já está na chamada (compatível com Element Call); se falhar, o nosso.
@@ -337,11 +575,25 @@ export async function joinVoice(roomId: string) {
     if (!cfg || !transport) throw lastErr ?? new Error("Não foi possível obter acesso à chamada.");
     if (seq !== joinSeq) return;
 
+    // WebKitGTK (Tauri/Linux) não tem WebRTC: usa o cliente nativo em Rust
+    if (nativeVoiceAvailable()) {
+      await joinNative(rtc, roomId, transport, cfg, seq);
+      return;
+    }
+
     const v = useSettings.getState().voice;
+
+    // Mídia criptografada ponta a ponta quando a sala Matrix é criptografada
+    // (mesmo critério de Element Call/Cinny — MSC4268).
+    const e2ee = room.hasEncryptionStateEvent();
+    ensureKeyProvider(e2ee);
+    wireEncryptionKeys(rtc);
+    if (e2ee) wireKeyCompat(rtc);
+
     const r = new LkRoom({
       adaptiveStream: true,
       dynacast: true,
-      webAudioMix: true,
+      webAudioMix: v.webAudioMix,
       audioCaptureDefaults: {
         deviceId: v.inputDeviceId || "default",
         echoCancellation: v.echoCancellation,
@@ -350,6 +602,9 @@ export async function joinVoice(roomId: string) {
       },
       audioOutput: { deviceId: v.outputDeviceId || "default" },
       videoCaptureDefaults: { resolution: VideoPresets.h720.resolution },
+      e2ee: e2ee
+        ? { keyProvider: keyProvider!, worker: new Worker(e2eeWorkerUrl, { type: "module" }) }
+        : undefined,
     });
     lk = r;
     session = rtc;
@@ -361,12 +616,115 @@ export async function joinVoice(roomId: string) {
       return;
     }
 
+    // Sem isto o LiveKit publica nossas faixas SEM criptografia (Encryption_Type.NONE),
+    // mesmo com o keyProvider configurado: as opções de e2ee só preparam o worker.
+    if (e2ee) await r.setE2EEEnabled(true);
+
+    rtc.join(
+      { userId: c.getUserId()!, deviceId: c.getDeviceId()!, memberId: `${c.getUserId()}:${c.getDeviceId()}` },
+      [{ ...transport, ...(transport.livekit_service_url ? { livekit_alias: roomId } : {}) }],
+      {
+        callIntent: "audio",
+        manageMediaKeys: e2ee,
+        applicationData: voiceAppData(),
+      },
+    );
+    // Chaves distribuídas/recebidas antes deste ponto do fluxo
+    if (e2ee) rtc.reemitEncryptionKeys();
+
     const { muted } = useVoice.getState();
     try {
       await r.localParticipant.setMicrophoneEnabled(!muted);
     } catch (e) {
       console.warn("Microfone indisponível", e);
       useVoice.setState({ muted: true });
+    }
+
+    if (e2ee) {
+      console.debug(
+        "[e2ee] identidades livekit: local=%s remotas=",
+        r.localParticipant.identity,
+        [...r.remoteParticipants.keys()],
+      );
+    }
+
+    for (const p of r.remoteParticipants.values()) initRemote(p);
+    useVoice.setState({ status: "connected", audioBlocked: !r.canPlaybackAudio, encrypted: e2ee });
+    refresh();
+    applyVolumes();
+    sounds.join();
+  } catch (e) {
+    console.error(e);
+    if (seq !== joinSeq) return;
+    unwireEncryptionKeys(rtc);
+    lk?.disconnect();
+    lk = null;
+    session = null;
+    useVoice.setState({ status: "error", error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Caminho nativo (Tauri/Linux): o SDK Rust do LiveKit cuida da mídia
+ * (microfone + áudio remoto) e o front só mantém a membership MatrixRTC
+ * e reflete o estado recebido via eventos.
+ */
+async function joinNative(
+  rtc: MatrixRTCSession,
+  roomId: string,
+  transport: Transport,
+  cfg: SfuConfig,
+  seq: number,
+) {
+  nativeActive = true;
+  nativePrevIds = null;
+  session = rtc;
+  const c = getClient();
+  try {
+    const { muted } = useVoice.getState();
+    await nativeConnect(cfg.url, cfg.jwt, muted, (e) => {
+      if (e.type === "snapshot") {
+        const participants: VParticipant[] = [];
+        if (e.local.identity) {
+          participants.push({
+            identity: e.local.identity,
+            userId: c.getUserId()!,
+            isLocal: true,
+            speaking: e.local.speaking,
+            micMuted: e.local.micMuted,
+          });
+        }
+        for (const np of e.participants) {
+          participants.push({
+            identity: np.identity,
+            userId: resolveUserId(np.identity),
+            isLocal: false,
+            speaking: np.speaking,
+            micMuted: np.micMuted,
+          });
+        }
+        // Sons de entrada/saída (diff com o snapshot anterior)
+        const ids = new Set(e.participants.map((np) => np.identity));
+        if (nativePrevIds) {
+          for (const id of ids) if (!nativePrevIds.has(id)) sounds.otherJoin();
+          for (const id of nativePrevIds) if (!ids.has(id)) sounds.otherLeave();
+        }
+        nativePrevIds = ids;
+        useVoice.setState({
+          participants,
+          quality: e.quality,
+          error: e.status === "reconnecting" ? "Reconectando…" : null,
+        });
+      } else if (e.type === "disconnected") {
+        if (!e.expected) void leaveVoice(true);
+      } else {
+        useVoice.setState({ error: e.message });
+      }
+    });
+    if (seq !== joinSeq) {
+      nativeActive = false;
+      void nativeLeave();
+      return;
     }
 
     rtc.join(
@@ -379,16 +737,13 @@ export async function joinVoice(roomId: string) {
       },
     );
 
-    for (const p of r.remoteParticipants.values()) initRemote(p);
-    useVoice.setState({ status: "connected", audioBlocked: !r.canPlaybackAudio });
-    refresh();
-    applyVolumes();
+    useVoice.setState({ status: "connected", audioBlocked: false, error: null });
     sounds.join();
+    applyVolumes();
   } catch (e) {
     console.error(e);
     if (seq !== joinSeq) return;
-    lk?.disconnect();
-    lk = null;
+    nativeActive = false;
     session = null;
     useVoice.setState({ status: "error", error: e instanceof Error ? e.message : String(e) });
   }
@@ -458,6 +813,9 @@ function wireRoom(r: LkRoom) {
       refresh();
     })
     .on(RoomEvent.ActiveSpeakersChanged, refresh)
+    .on(RoomEvent.ConnectionQualityChanged, (q, p) => {
+      useVoice.setState({ quality: { ...useVoice.getState().quality, [p.identity]: qualityLevel(q) } });
+    })
     .on(RoomEvent.AudioPlaybackStatusChanged, () => useVoice.setState({ audioBlocked: !r.canPlaybackAudio }))
     .on(RoomEvent.ConnectionStateChanged, (st) => {
       if (st === ConnectionState.Reconnecting) useVoice.setState({ error: "Reconectando…" });
@@ -465,6 +823,12 @@ function wireRoom(r: LkRoom) {
     })
     .on(RoomEvent.Disconnected, () => {
       if (lk === r) void leaveVoice(true);
+    })
+    .on(RoomEvent.EncryptionError, (err, p) => {
+      console.error("[e2ee] erro de criptografia de mídia", p?.identity ?? "(local)", err);
+    })
+    .on(RoomEvent.ParticipantEncryptionStatusChanged, (enabled, p) => {
+      console.debug("[e2ee] criptografia", enabled ? "ativa" : "inativa", "para", p?.identity);
     });
 }
 
@@ -482,11 +846,17 @@ function syncLocalFlags() {
 
 export async function leaveVoice(silent = false) {
   joinSeq++;
+  if (nativeActive) {
+    nativeActive = false;
+    nativePrevIds = null;
+    void nativeLeave();
+  }
   const r = lk;
   const s = session;
   lk = null;
   session = null;
   window.clearTimeout(appDataTimer);
+  unwireEncryptionKeys(s);
   useVoice.setState({
     status: "idle",
     roomId: null,
@@ -496,7 +866,10 @@ export async function leaveVoice(silent = false) {
     cameraOn: false,
     screenOn: false,
     error: null,
+    encrypted: false,
+    quality: {},
   });
+  prevStats = null;
   if (audioHost) audioHost.innerHTML = "";
   if (!silent) sounds.leave();
   try {
@@ -521,6 +894,17 @@ export async function toggleMute() {
   }
   useVoice.setState({ muted });
   muted ? sounds.mute() : sounds.unmute();
+  if (nativeActive) {
+    try {
+      await nativeSetMicMuted(muted);
+    } catch (e) {
+      console.warn(e);
+      useVoice.setState({ muted: true });
+    }
+    refresh();
+    scheduleAppDataUpdate();
+    return;
+  }
   if (lk) {
     try {
       await lk.localParticipant.setMicrophoneEnabled(!muted);
@@ -545,6 +929,10 @@ export async function toggleDeafen() {
     sounds.unmute();
   }
   applyVolumes();
+  if (nativeActive) {
+    await nativeSetDeafened(deafened).catch(() => undefined);
+    return;
+  }
   if (lk) {
     try {
       await lk.localParticipant.setMicrophoneEnabled(!useVoice.getState().muted);
@@ -557,6 +945,10 @@ export async function toggleDeafen() {
 }
 
 export async function toggleCamera() {
+  if (nativeActive) {
+    alert("Câmera ainda não é suportada no modo nativo de chamada.");
+    return;
+  }
   if (!lk) return;
   const on = !useVoice.getState().cameraOn;
   const v = useSettings.getState().voice;
@@ -580,6 +972,10 @@ const RESOLUTIONS: Record<string, VideoResolution> = {
 };
 
 export async function toggleScreenShare(force?: boolean) {
+  if (nativeActive) {
+    alert("Compartilhar a tela ainda não é suportado no modo nativo de chamada.");
+    return;
+  }
   if (!lk) return;
   const on = force ?? !useVoice.getState().screenOn;
   const v = useSettings.getState().voice;
@@ -643,6 +1039,11 @@ export function setStreamVolume(userId: string, vol: number) {
 }
 
 export async function switchDevice(kind: MediaDeviceKind, deviceId: string) {
+  if (nativeActive) {
+    // IDs da webview (enumerateDevices) não correspondem aos do áudio nativo
+    console.warn("Troca de dispositivo ainda não suportada no modo nativo de chamada");
+    return;
+  }
   if (!lk) return;
   try {
     await lk.switchActiveDevice(kind, deviceId);
@@ -652,8 +1053,68 @@ export async function switchDevice(kind: MediaDeviceKind, deviceId: string) {
 }
 
 export async function resumeAudio() {
+  if (nativeActive) return; // não há autoplay block fora da webview
   await lk?.startAudio();
   useVoice.setState({ audioBlocked: false });
+}
+
+let prevStats: { time: number; bytes: number } | null = null;
+
+/**
+ * Estatísticas agregadas do downlink (SFU -> este cliente), lidas do RTCPeerConnection
+ * de recepção. Perda alta/jitter alto aqui = problema de rede entre o SFU e você.
+ */
+export async function getDownlinkStats(): Promise<DownlinkStats | null> {
+  if (!lk) return null;
+  try {
+    const report = await lk.engine?.pcManager?.subscriber?.getStats?.();
+    if (!report) return null;
+
+    let jitterSum = 0;
+    let jitterCount = 0;
+    let packetsLost = 0;
+    let packetsReceived = 0;
+    let bytes = 0;
+    let framesDropped = 0;
+    let videoCodec: string | null = null;
+    const codecs = new Map<string, string>();
+    for (const raw of report.values()) {
+      const s = raw as Record<string, any>;
+      if (s.type === "codec") {
+        if (typeof s.mimeType === "string") codecs.set(s.id, s.mimeType);
+      } else if (s.type === "inbound-rtp" && !s.isRemote) {
+        jitterSum += s.jitter ?? 0;
+        jitterCount++;
+        packetsLost += Math.max(0, s.packetsLost ?? 0);
+        packetsReceived += s.packetsReceived ?? 0;
+        bytes += s.bytesReceived ?? 0;
+        if (s.kind === "video") {
+          framesDropped += s.framesDropped ?? 0;
+          if (s.codecId) {
+            const mime = codecs.get(s.codecId) ?? "";
+            if (mime) videoCodec = mime.split("/")[1] ?? mime;
+          }
+        }
+      }
+    }
+
+    const now = performance.now();
+    let kbps = 0;
+    if (prevStats && now > prevStats.time) {
+      kbps = Math.max(0, (bytes - prevStats.bytes) / ((now - prevStats.time) / 1000) / 125);
+    }
+    prevStats = { time: now, bytes };
+
+    return {
+      jitterMs: jitterCount ? (jitterSum / jitterCount) * 1000 : 0,
+      lossPct: packetsReceived + packetsLost ? (packetsLost / (packetsReceived + packetsLost)) * 100 : 0,
+      kbps,
+      framesDropped,
+      videoCodec,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function getLocalIdentity(): string | undefined {
@@ -673,6 +1134,7 @@ useSettings.subscribe((s, prev) => {
 
 window.addEventListener("beforeunload", () => {
   if (session) void session.leave(1000);
+  if (nativeActive) void nativeLeave();
   lk?.disconnect();
 });
 

@@ -5,6 +5,7 @@ import { getClient } from "../../matrix/client";
 import { useSettings } from "../../store/settings";
 import { anchorOf, useAppStore } from "../../store/app";
 import {
+  getDownlinkStats,
   joinVoice,
   leaveVoice,
   resumeAudio,
@@ -18,6 +19,7 @@ import {
   toggleMute,
   toggleScreenShare,
   useVoice,
+  type DownlinkStats,
   type TileKind,
   type VParticipant,
 } from "../../voice/voice";
@@ -40,6 +42,7 @@ import {
   IconPhoneOff,
   IconPip,
   IconScreenUp,
+  IconShieldCheck,
   IconSpeaker,
   IconVideo,
   IconVideoOff,
@@ -52,6 +55,12 @@ interface TileData {
   p: VParticipant;
 }
 
+/** O bloco tem vídeo publicado agora (câmera ligada ou transmissão de tela)? */
+function tileHasVideo(t: TileData): boolean {
+  const pub = t.kind === "screen" ? t.p.screen : t.p.camera;
+  return !!pub && !pub.isMuted;
+}
+
 export default function CallView({ room }: { room: Room }) {
   const status = useVoice((s) => s.status);
   const voiceRoomId = useVoice((s) => s.roomId);
@@ -59,6 +68,10 @@ export default function CallView({ room }: { room: Room }) {
   const focused = useVoice((s) => s.focused);
   const audioBlocked = useVoice((s) => s.audioBlocked);
   const error = useVoice((s) => s.error);
+  const encrypted = useVoice((s) => s.encrypted);
+  const debugStats = useSettings((s) => s.voice.debugStats);
+  const hideNoVideo = useSettings((s) => s.voice.hideNoVideo);
+  const setVoice = useSettings((s) => s.setVoice);
   const rtcMembers = useRtcMembers(room);
   const [showChat, setShowChat] = useState(false);
   const connectedHere = voiceRoomId === room.roomId && status !== "idle";
@@ -69,7 +82,11 @@ export default function CallView({ room }: { room: Room }) {
   }
   for (const p of participants) tiles.push({ key: tileKey(p.identity, "camera"), kind: "camera", p });
   const liveUsers = new Set(participants.map((p) => p.userId));
-  const ghosts = rtcMembers.filter((m) => !liveUsers.has(m.userId));
+  const allGhosts = rtcMembers.filter((m) => !liveUsers.has(m.userId));
+  // Modo "só vídeo": esconde blocos sem câmera/transmissão para caber mais lives na tela
+  const visibleTiles = hideNoVideo ? tiles.filter(tileHasVideo) : tiles;
+  const ghosts = hideNoVideo ? [] : allGhosts;
+  const hiddenCount = tiles.length - visibleTiles.length + allGhosts.length - ghosts.length;
   const focusTile = focused ? tiles.find((t) => t.key === focused) : undefined;
 
   return (
@@ -78,7 +95,26 @@ export default function CallView({ room }: { room: Room }) {
         <header className="chat-header call-header">
           <IconSpeaker size={22} className="muted" />
           <span className="chat-title ellipsis">{room.name}</span>
+          {connectedHere && encrypted && (
+            <span className="call-e2ee" title="Mídia criptografada ponta a ponta">
+              <IconShieldCheck size={16} />
+            </span>
+          )}
           <span className="flex-spacer" />
+          {connectedHere && (
+            <button
+              className={`icon-btn call-hide-novideo ${hideNoVideo ? "active" : ""}`}
+              title={
+                hideNoVideo
+                  ? `Mostrar todos os participantes${hiddenCount ? ` (${hiddenCount} oculto${hiddenCount > 1 ? "s" : ""})` : ""}`
+                  : "Ocultar participantes sem vídeo"
+              }
+              onClick={() => setVoice({ hideNoVideo: !hideNoVideo })}
+            >
+              {hideNoVideo ? <IconVideo /> : <IconVideoOff />}
+              {hideNoVideo && hiddenCount > 0 && <span className="call-hidden-count">{hiddenCount}</span>}
+            </button>
+          )}
           {connectedHere && focusTile && (
             <button className="icon-btn" title="Voltar à grade" onClick={() => setFocused(null)}>
               <IconGrid />
@@ -100,31 +136,40 @@ export default function CallView({ room }: { room: Room }) {
             )}
             {status === "connecting" && <div className="call-banner neutral">Conectando ao servidor de mídia…</div>}
             {status === "error" && <div className="call-banner">{error}</div>}
-            <div className={`call-stage ${focusTile ? "focus-mode" : ""}`}>
-              {focusTile ? (
-                <>
-                  <div className="focus-main">
-                    <Tile tile={focusTile} room={room} focused />
-                  </div>
-                  <div className="focus-strip">
-                    {tiles
-                      .filter((t) => t.key !== focusTile.key)
-                      .map((t) => (
-                        <Tile key={t.key} tile={t} room={room} small />
-                      ))}
-                  </div>
-                </>
-              ) : (
-                <div className={`tile-grid n${Math.min(tiles.length + ghosts.length, 9)}`}>
-                  {tiles.map((t) => (
-                    <Tile key={t.key} tile={t} room={room} />
+        <div className={`call-stage ${focusTile ? "focus-mode" : ""}`}>
+          {focusTile ? (
+            <>
+              <div className="focus-main">
+                <Tile tile={focusTile} room={room} focused />
+              </div>
+              <div className="focus-strip">
+                {visibleTiles
+                  .filter((t) => t.key !== focusTile.key)
+                  .map((t) => (
+                    <Tile key={t.key} tile={t} room={room} small />
                   ))}
-                  {ghosts.map((g) => (
-                    <GhostTile key={g.userId} room={room} userId={g.userId} />
-                  ))}
-                </div>
-              )}
+              </div>
+            </>
+          ) : visibleTiles.length + ghosts.length === 0 ? (
+            <div className="call-empty">
+              <IconVideoOff size={40} />
+              <p>Ninguém está com câmera ou transmissão ligada agora.</p>
+              <button className="btn secondary" onClick={() => setVoice({ hideNoVideo: false })}>
+                Mostrar todos os participantes
+              </button>
             </div>
+          ) : (
+            <div className={`tile-grid n${Math.min(visibleTiles.length + ghosts.length, 9)}`}>
+              {visibleTiles.map((t) => (
+                <Tile key={t.key} tile={t} room={room} />
+              ))}
+              {ghosts.map((g) => (
+                <GhostTile key={g.userId} room={room} userId={g.userId} />
+              ))}
+            </div>
+          )}
+          {debugStats && <CallStats />}
+        </div>
             <CallControls />
           </>
         )}
@@ -261,6 +306,7 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
 
       <div className="tile-label">
         {kind === "screen" && <span className="live-badge">AO VIVO</span>}
+        {!p.isLocal && <QualityBadge identity={p.identity} />}
         {kind === "camera" && (p.micMuted || (p.isLocal && deafened)) && <IconMicOff size={14} className="danger" />}
         <span className="ellipsis">{p.isLocal && kind === "screen" ? "Sua transmissão" : name}</span>
       </div>
@@ -317,6 +363,44 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Barrinhas de qualidade do downlink (estilo Discord), via ConnectionQualityChanged do LiveKit. */
+function QualityBadge({ identity }: { identity: string }) {
+  const level = useVoice((s) => s.quality[identity] ?? 0);
+  if (!level) return null;
+  const title = level >= 3 ? "Ótima conexão" : level === 2 ? "Boa conexão" : "Conexão ruim";
+  return (
+    <span className={`quality-badge q${level}`} title={title}>
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
+/** Painel de diagnóstico: estatísticas agregadas de recepção, atualizadas a cada 2s. */
+function CallStats() {
+  const [stats, setStats] = useState<DownlinkStats | null>(null);
+  useEffect(() => {
+    const tick = async () => setStats(await getDownlinkStats());
+    void tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+  if (!stats) return null;
+  const level = (v: number, warn: number, bad: number) => (v >= bad ? "bad" : v >= warn ? "warn" : "");
+  return (
+    <div className="call-stats">
+      <span>↓ {Math.round(stats.kbps)} kbps</span>
+      <span className={level(stats.lossPct, 1, 5)}>perda {stats.lossPct.toFixed(1)}%</span>
+      <span className={level(stats.jitterMs, 30, 60)}>jitter {Math.round(stats.jitterMs)} ms</span>
+      {stats.framesDropped > 0 && <span>{stats.framesDropped} quadros descartados</span>}
+      {stats.videoCodec && <span>{stats.videoCodec}</span>}
     </div>
   );
 }
