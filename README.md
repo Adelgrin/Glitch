@@ -40,6 +40,40 @@ Detalhes (em `electron/`):
 - Os executáveis não são assinados, então o Windows SmartScreen avisa na primeira execução (“Mais informações › Executar assim mesmo”).
 - Os dados ficam em `%APPDATA%\Glitch` (é preciso entrar na conta uma vez no app, separado do navegador).
 
+## App para Linux
+
+Os pacotes de Linux precisam ser gerados **num Linux** (ou no WSL do Windows).
+
+```bash
+# 1. Node.js 22 ou mais novo (ex.: via nvm)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc && nvm install --lts
+
+# 2. Dependências do projeto
+cd glitch
+npm ci
+
+# 3. Gerar os pacotes (AppImage, .deb, .rpm e .tar.gz em release/)
+npm run dist:linux
+```
+
+- Só alguns formatos: `npm run build && npx electron-builder --linux deb AppImage`
+- O `.rpm` precisa do `rpmbuild` (Debian/Ubuntu: `sudo apt install rpm`; Fedora: `sudo dnf install rpm-build`).
+- ARM (ex.: Raspberry Pi): acrescente `--arm64`.
+
+Instalar:
+
+| Distribuição | Comando |
+| --- | --- |
+| Debian, Ubuntu, Mint, Pop!\_OS | `sudo apt install ./release/Glitch-0.1.0-amd64.deb` |
+| Fedora, openSUSE | `sudo dnf install ./release/Glitch-0.1.0-x86_64.rpm` |
+| Qualquer uma (AppImage) | `chmod +x release/Glitch-0.1.0-x86_64.AppImage && ./release/Glitch-0.1.0-x86_64.AppImage` |
+| Qualquer uma (tar.gz) | extraia e rode `./glitch` |
+
+- AppImage no Ubuntu 22.04+ precisa do FUSE 2 (`sudo apt install libfuse2t64`, ou `libfuse2` no 22.04). No Ubuntu 24.04+ o AppArmor bloqueia o sandbox do Chromium em AppImages; prefira o `.deb` (ou rode com `--no-sandbox`).
+- Desinstalar: `sudo apt remove glitch` ou `sudo dnf remove glitch`. Os dados ficam em `~/.config/Glitch`.
+- Compartilhar tela no Wayland usa o seletor do próprio sistema (PipeWire + xdg-desktop-portal, padrão no GNOME e KDE). Áudio do sistema na transmissão só no Windows.
+
 ## Como o Discord vira Matrix
 
 | Discord              | Matrix                                                                 |

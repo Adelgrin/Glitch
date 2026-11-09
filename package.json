@@ -11,7 +11,9 @@
     "app": "npm run build && electron .",
     "app:dev": "electron . --dev",
     "dist": "npm run build && electron-builder --win",
-    "dist:dir": "npm run build && electron-builder --win --dir"
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:linux:dir": "npm run build && electron-builder --linux --dir"
   },
   "dependencies": {
     "emojibase-data": "^18.0.0",
@@ -76,6 +78,41 @@
     },
     "portable": {
       "artifactName": "Glitch-${version}-portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm",
+        "tar.gz"
+      ],
+      "icon": "build/icon.png",
+      "category": "Network",
+      "executableName": "glitch",
+      "maintainer": "Glitch <glitch@localhost>",
+      "synopsis": "Cliente Matrix com cara de Discord",
+      "description": "Glitch: cliente do protocolo Matrix com servidores, canais de voz, chamadas e transmissões no estilo do Discord.",
+      "desktop": {
+        "entry": {
+          "Name": "Glitch",
+          "Comment": "Cliente Matrix com cara de Discord",
+          "Categories": "Network;InstantMessaging;Chat;",
+          "StartupWMClass": "Glitch",
+          "Keywords": "matrix;chat;discord;voz;"
+        }
+      },
+      "artifactName": "Glitch-${version}-${arch}.${ext}"
+    },
+    "deb": {
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3",
+        "libsecret-1-0",
+        "libgbm1",
+        "libasound2 | libasound2t64"
+      ]
     }
-  }
+  },
+  "homepage": "https://matrix.org"
 }

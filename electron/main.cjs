@@ -25,6 +25,14 @@ const DEV = process.argv.includes("--dev");
 const DEV_URL = "http://localhost:5173/";
 const DIST = path.join(__dirname, "..", "dist");
 const ICON = path.join(__dirname, "icon.png");
+const IS_WAYLAND =
+  process.platform === "linux" && (process.env.XDG_SESSION_TYPE === "wayland" || !!process.env.WAYLAND_DISPLAY);
+
+// Linux: captura de tela pelo PipeWire (necessário no Wayland) e Wayland nativo quando disponível
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("enable-features", "WebRTCPipeWireCapturer");
+  app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+}
 
 // Precisa vir antes do app ficar pronto
 protocol.registerSchemesAsPrivileged([
@@ -139,6 +147,9 @@ async function pickSource(audioRequested) {
     thumbnailSize: { width: 400, height: 225 },
     fetchWindowIcons: true,
   });
+  // Linux com Wayland: o sistema (portal do PipeWire) já mostrou o seletor dele e
+  // devolve só a fonte escolhida — não abrimos um segundo seletor.
+  if (IS_WAYLAND) return sources[0] ? { source: sources[0], audio: false } : null;
   const ownId = mainWindow?.getMediaSourceId?.();
   const list = sources
     .filter((s) => s.id !== ownId)
