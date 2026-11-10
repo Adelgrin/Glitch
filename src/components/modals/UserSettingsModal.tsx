@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { getClient, logout } from "../../matrix/client";
 import { uploadBlob, useMxc } from "../../matrix/media";
 import { useAppStore, useVersion } from "../../store/app";
-import { THEME_PRESETS, useSettings, type AppearanceSettings, type ThemeColors } from "../../store/settings";
+import { THEME_PRESETS, savedThemeKey, useSettings, type AppearanceSettings, type ThemeColors } from "../../store/settings";
 import { switchDevice, useVoice } from "../../voice/voice";
 import Avatar from "../Avatar";
 import { ImageField } from "./Modal";
 import { EscClose } from "./ServerSettingsModal";
-import { IconCompass, IconPlus, IconShieldAlert, IconShieldCheck, IconX } from "../icons";
+import { IconCompass, IconPlus, IconShieldAlert, IconShieldCheck, IconVideoOff, IconX } from "../icons";
 import { refreshStatus, startRestore, startSelfVerification, useVerification, verifyOtherDevice } from "../../matrix/verification";
 import { RestoreStatus } from "./VerificationModal";
 import { BannerEditor, CallColorEditor } from "./ProfileAppearance";
@@ -327,15 +327,29 @@ function Appearance() {
   const a = useSettings((s) => s.appearance);
   const set = useSettings((s) => s.setAppearance);
   const applyPreset = useSettings((s) => s.applyPreset);
+  const savedThemes = useSettings((s) => s.savedThemes);
+  const saveTheme = useSettings((s) => s.saveTheme);
+  const applySavedTheme = useSettings((s) => s.applySavedTheme);
+  const deleteSavedTheme = useSettings((s) => s.deleteSavedTheme);
   const [importText, setImportText] = useState("");
+  const [naming, setNaming] = useState(false);
+  const [themeName, setThemeName] = useState("");
+  const nameTaken = savedThemes.some((t) => t.name.toLowerCase() === themeName.trim().toLowerCase());
+
+  const startNaming = () => {
+    // Sugestão: nome do tema salvo em uso, ou "Meu tema N"
+    const current = savedThemes.find((t) => savedThemeKey(t.id) === a.theme);
+    setThemeName(current?.name ?? `Meu tema ${savedThemes.length + 1}`);
+    setNaming(true);
+  };
 
   const setColor = (k: keyof ThemeColors, v: string) => set({ theme: "custom", colors: { ...a.colors, [k]: v } });
 
   const exportTheme = () => {
-    const { customCss, accent, colors, railColors, radius, fontScale, chatFont, density, avatarShape, panelOpacity } = a;
+    const { customCss, accent, colors, railColors, stopColor, radius, fontScale, chatFont, density, avatarShape, panelOpacity } = a;
     // A imagem fica de fora (seria grande demais); os ajustes do fundo vão junto
     const appBackground = { ...a.appBackground, image: null };
-    const json = JSON.stringify({ accent, colors, railColors, radius, fontScale, chatFont, density, avatarShape, panelOpacity, appBackground, customCss });
+    const json = JSON.stringify({ accent, colors, railColors, stopColor, radius, fontScale, chatFont, density, avatarShape, panelOpacity, appBackground, customCss });
     void navigator.clipboard.writeText(json);
     alert("Tema copiado para a área de transferência!");
   };
@@ -377,12 +391,70 @@ function Appearance() {
             <em>{p.name}</em>
           </button>
         ))}
+        {savedThemes.map((t) => (
+          <div key={t.id} className="theme-swatch-wrap">
+            <button
+              className={`theme-swatch saved ${a.theme === savedThemeKey(t.id) ? "active" : ""}`}
+              title={t.name}
+              onClick={() => applySavedTheme(t.id)}
+              style={{ background: `linear-gradient(135deg, ${t.colors.bg3} 0 33%, ${t.colors.bg2} 33% 66%, ${t.colors.bg1} 66%)` }}
+            >
+              <span style={{ background: t.accent }} />
+              <em>{t.name}</em>
+            </button>
+            <button
+              className="theme-swatch-delete"
+              title={`Apagar o tema "${t.name}"`}
+              onClick={() => confirm(`Apagar o tema "${t.name}"?`) && deleteSavedTheme(t.id)}
+            >
+              <IconX size={12} />
+            </button>
+          </div>
+        ))}
+        {!naming && (
+          <button className="theme-swatch add" title="Salvar as cores atuais como um tema" onClick={startNaming}>
+            <IconPlus size={22} />
+            <em>Salvar tema</em>
+          </button>
+        )}
       </div>
+      {naming && (
+        <form
+          className="theme-save-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!themeName.trim()) return;
+            saveTheme(themeName);
+            setNaming(false);
+          }}
+        >
+          <input
+            autoFocus
+            className="grow"
+            value={themeName}
+            maxLength={40}
+            placeholder="Nome do tema"
+            onChange={(e) => setThemeName(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setNaming(false))}
+          />
+          <button type="button" className="btn link small" onClick={() => setNaming(false)}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn primary small" disabled={!themeName.trim()}>
+            {nameTaken ? "Substituir" : "Salvar"}
+          </button>
+        </form>
+      )}
+      {naming && nameTaken && <p className="muted tiny">Já existe um tema com esse nome; ele será atualizado com as cores atuais.</p>}
+      <p className="muted tiny">
+        Salva as cores atuais (fundo, texto, destaque, botões de criar/entrar e de parar) como um tema que fica junto dos
+        prontos.
+      </p>
 
       <h3>Cores personalizadas</h3>
       <div className="color-grid">
         <label className="color-field">
-          <input type="color" value={a.accent} onChange={(e) => set({ accent: e.target.value })} />
+          <input type="color" value={a.accent} onChange={(e) => set({ theme: "custom", accent: e.target.value })} />
           <span>Cor de destaque</span>
         </label>
         {COLOR_LABELS.map(([k, l]) => (
@@ -392,15 +464,21 @@ function Appearance() {
           </label>
         ))}
         <label className="color-field">
-          <input type="color" value={a.railColors.create} onChange={(e) => set({ railColors: { ...a.railColors, create: e.target.value } })} />
+          <input type="color" value={a.railColors.create} onChange={(e) => set({ theme: "custom", railColors: { ...a.railColors, create: e.target.value } })} />
           <span className="color-field-with-icon">
             <IconPlus size={14} /> Criar servidor
           </span>
         </label>
         <label className="color-field">
-          <input type="color" value={a.railColors.join} onChange={(e) => set({ railColors: { ...a.railColors, join: e.target.value } })} />
+          <input type="color" value={a.railColors.join} onChange={(e) => set({ theme: "custom", railColors: { ...a.railColors, join: e.target.value } })} />
           <span className="color-field-with-icon">
             <IconCompass size={14} /> Entrar em servidor
+          </span>
+        </label>
+        <label className="color-field" title="Botões de desligar a câmera e parar a transmissão">
+          <input type="color" value={a.stopColor} onChange={(e) => set({ theme: "custom", stopColor: e.target.value })} />
+          <span className="color-field-with-icon">
+            <IconVideoOff size={14} /> Parar câmera e transmissão
           </span>
         </label>
       </div>

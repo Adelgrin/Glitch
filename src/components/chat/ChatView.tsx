@@ -7,7 +7,7 @@ import { useSettings } from "../../store/settings";
 import { MessageItem } from "./MessageItem";
 import Composer from "./Composer";
 import { formatDay } from "./format";
-import { IconDownload, IconSettings, IconUserCircle, IconUsers, IconX } from "../icons";
+import { IconDownload, IconSettings, IconShieldCheck, IconUserCircle, IconUsers, IconX } from "../icons";
 import { saveUrlAs } from "../../matrix/media";
 import RoomIcon from "../RoomIcon";
 
@@ -133,6 +133,11 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
       <header className="chat-header">
         <RoomIcon room={room} size={26} className="header-icon" />
         <span className="chat-title ellipsis">{isDm && partner ? partner.name : room.name}</span>
+        {room.hasEncryptionStateEvent() && (
+          <span className="channel-e2ee header" title="Criptografia de ponta a ponta ativada">
+            <IconShieldCheck size={16} />
+          </span>
+        )}
         {topic && !embedded && (
           <>
             <span className="chat-header-sep" />

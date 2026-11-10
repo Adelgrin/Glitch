@@ -43,6 +43,8 @@ import {
   IconMic,
   IconMicOff,
   IconPhoneOff,
+  IconScreen,
+  IconScreenOff,
   IconScreenUp,
   IconShieldCheck,
   IconVideo,
@@ -72,6 +74,8 @@ export default function CallView({ room }: { room: Room }) {
   const encrypted = useVoice((s) => s.encrypted);
   const debugStats = useSettings((s) => s.voice.debugStats);
   const hideNoVideo = useSettings((s) => s.voice.hideNoVideo);
+  const hideUnwatched = useSettings((s) => s.voice.hideUnwatchedStreams);
+  const watching = useVoice((s) => s.watching);
   const setVoice = useSettings((s) => s.setVoice);
   const rtcMembers = useRtcMembers(room);
   const [showChat, setShowChat] = useState(false);
@@ -84,10 +88,15 @@ export default function CallView({ room }: { room: Room }) {
   for (const p of participants) tiles.push({ key: tileKey(p.identity, "camera"), kind: "camera", p });
   const liveUsers = new Set(participants.map((p) => p.userId));
   const allGhosts = rtcMembers.filter((m) => !liveUsers.has(m.userId));
+  // Transmissão (de outra pessoa) que você não está assistindo — a câmera conta como o próprio usuário
+  const isUnwatchedStream = (t: TileData) => t.kind === "screen" && !t.p.isLocal && !watching[t.key];
+  const unwatchedCount = tiles.filter(isUnwatchedStream).length;
   // Modo "só vídeo": esconde blocos sem câmera/transmissão para caber mais lives na tela
-  const visibleTiles = hideNoVideo ? tiles.filter(tileHasVideo) : tiles;
+  const visibleTiles = tiles.filter((t) => (!hideNoVideo || tileHasVideo(t)) && !(hideUnwatched && isUnwatchedStream(t)));
   const ghosts = hideNoVideo ? [] : allGhosts;
   const hiddenCount = tiles.length - visibleTiles.length + allGhosts.length - ghosts.length;
+  const hiddenStreams = hideUnwatched ? unwatchedCount : 0;
+  const hiddenUsers = hiddenCount - hiddenStreams;
   const focusTile = focused ? tiles.find((t) => t.key === focused) : undefined;
 
   return (
@@ -96,24 +105,45 @@ export default function CallView({ room }: { room: Room }) {
         <header className="chat-header call-header">
           <RoomIcon room={room} size={26} className="header-icon" />
           <span className="chat-title ellipsis">{room.name}</span>
-          {connectedHere && encrypted && (
-            <span className="call-e2ee" title="Mídia criptografada ponta a ponta">
+          {(room.hasEncryptionStateEvent() || (connectedHere && encrypted)) && (
+            <span
+              className="channel-e2ee header"
+              title={
+                connectedHere && encrypted
+                  ? "Chat e mídia da chamada criptografados de ponta a ponta"
+                  : "Chat do canal criptografado de ponta a ponta"
+              }
+            >
               <IconShieldCheck size={16} />
             </span>
           )}
           <span className="flex-spacer" />
           {connectedHere && (
             <button
+              className={`icon-btn call-hide-novideo ${hideUnwatched ? "active" : ""}`}
+              title={
+                hideUnwatched
+                  ? `Mostrar transmissões não assistidas${hiddenStreams ? ` (${hiddenStreams} oculta${hiddenStreams > 1 ? "s" : ""})` : ""}`
+                  : "Ocultar transmissões que você não está assistindo"
+              }
+              onClick={() => setVoice({ hideUnwatchedStreams: !hideUnwatched })}
+            >
+              {hideUnwatched ? <IconScreenOff /> : <IconScreen />}
+              {hideUnwatched && hiddenStreams > 0 && <span className="call-hidden-count">{hiddenStreams}</span>}
+            </button>
+          )}
+          {connectedHere && (
+            <button
               className={`icon-btn call-hide-novideo ${hideNoVideo ? "active" : ""}`}
               title={
                 hideNoVideo
-                  ? `Mostrar todos os participantes${hiddenCount ? ` (${hiddenCount} oculto${hiddenCount > 1 ? "s" : ""})` : ""}`
+                  ? `Mostrar todos os participantes${hiddenUsers ? ` (${hiddenUsers} oculto${hiddenUsers > 1 ? "s" : ""})` : ""}`
                   : "Ocultar participantes sem vídeo"
               }
               onClick={() => setVoice({ hideNoVideo: !hideNoVideo })}
             >
               {hideNoVideo ? <IconVideo /> : <IconVideoOff />}
-              {hideNoVideo && hiddenCount > 0 && <span className="call-hidden-count">{hiddenCount}</span>}
+              {hideNoVideo && hiddenUsers > 0 && <span className="call-hidden-count">{hiddenUsers}</span>}
             </button>
           )}
           {connectedHere && focusTile && (
@@ -154,8 +184,12 @@ export default function CallView({ room }: { room: Room }) {
           ) : visibleTiles.length + ghosts.length === 0 ? (
             <div className="call-empty">
               <IconVideoOff size={40} />
-              <p>Ninguém está com câmera ou transmissão ligada agora.</p>
-              <button className="btn secondary" onClick={() => setVoice({ hideNoVideo: false })}>
+              <p>
+                {hideNoVideo
+                  ? "Ninguém está com câmera ou transmissão ligada agora."
+                  : "Todas as transmissões estão ocultas porque você não está assistindo nenhuma."}
+              </p>
+              <button className="btn secondary" onClick={() => setVoice({ hideNoVideo: false, hideUnwatchedStreams: false })}>
                 Mostrar todos os participantes
               </button>
             </div>
@@ -547,12 +581,12 @@ function CallControls() {
 
   return (
     <div className="call-controls">
-      <button className={`call-btn ${cameraOn ? "on" : ""}`} disabled={disabled} title="Câmera" onClick={toggleCamera}>
+      <button className={`call-btn ${cameraOn ? "stop" : ""}`} disabled={disabled} title={cameraOn ? "Desligar câmera" : "Ligar câmera"} onClick={toggleCamera}>
         {cameraOn ? <IconVideo /> : <IconVideoOff />}
       </button>
       <div className="call-btn-group">
         <button
-          className={`call-btn ${screenOn ? "on" : ""}`}
+          className={`call-btn ${screenOn ? "stop" : ""}`}
           disabled={disabled}
           title={screenOn ? "Parar transmissão" : "Transmitir tela"}
           onClick={() => toggleScreenShare()}

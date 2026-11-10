@@ -20,7 +20,8 @@ export const IconHeadphonesOff = make(<><path d="m2 2 20 20" /><path d="M3 18v-6
 export const IconVideo = make(<><rect x="2" y="6" width="14" height="12" rx="2" /><path d="m16 10 6-3v10l-6-3" /></>);
 export const IconVideoOff = make(<><path d="m2 2 20 20" /><path d="M10.7 6H14a2 2 0 0 1 2 2v3.3l1 1L22 7v10M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2" /></>);
 export const IconScreen = make(<><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></>);
-export const IconScreenUp = make(<><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4M12 13V7M9 10l3-3 3 3" /></>);
+export const IconScreenOff = make(<><path d="m2 2 20 20" /><path d="M8 3h12a2 2 0 0 1 2 2v10a2 2 0 0 1-.6 1.4M16 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 1-1.7M8 21h8M12 17v4" /></>);
+export const IconScreenUp =make(<><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4M12 13V7M9 10l3-3 3 3" /></>);
 export const IconPhoneOff = make(<><path d="M10.7 13.3a16 16 0 0 0 3.4 2.6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 4.2 2 2 0 0 1 5.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.4 2.1L9.1 9.9" /><path d="m22 2-20 20" /></>);
 export const IconSettings = make(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>);
 export const IconPlus = make(<path d="M12 5v14M5 12h14" />);
@@ -34,7 +35,8 @@ export const IconTrash = make(<><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1
 export const IconSmile = make(<><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></>);
 export const IconPaperclip = make(<path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7L9.4 17.4a2 2 0 0 1-2.8-2.8l8.5-8.5" />);
 export const IconCompass = make(<><circle cx="12" cy="12" r="10" /><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z" /></>);
-export const IconFullscreen = make(<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />);
+export const IconCopy = make(<><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>);
+export const IconFullscreen =make(<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />);
 export const IconPip = make(<><rect x="2" y="4" width="20" height="16" rx="2" /><rect x="12" y="12" width="8" height="6" rx="1" /></>);
 export const IconEye = make(<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></>);
 export const IconEyeOff = make(<><path d="m2 2 20 20" /><path d="M6.7 6.7C3.6 8.6 2 12 2 12s4 8 10 8a10 10 0 0 0 5.3-1.5M10 4.2A9 9 0 0 1 12 4c7 0 10 8 10 8a17 17 0 0 1-2.2 3.3" /></>);

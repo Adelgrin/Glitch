@@ -127,6 +127,27 @@ export function saveUrlAs(url: string, filename: string) {
   a.remove();
 }
 
+/**
+ * Copia uma imagem (URL blob:) para a área de transferência. A área de transferência
+ * só aceita PNG de forma confiável, então outros formatos são convertidos.
+ */
+export async function copyImageToClipboard(url: string) {
+  const blob = await (await fetch(url)).blob();
+  let png = blob;
+  if (blob.type !== "image/png") {
+    const bmp = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0);
+    bmp.close();
+    png = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Não foi possível converter a imagem."))), "image/png"),
+    );
+  }
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+}
+
 /** Baixa o arquivo original de uma mensagem de mídia. */
 export async function downloadContent(content: MediaContent) {
   const url = await contentBlobUrl(content);

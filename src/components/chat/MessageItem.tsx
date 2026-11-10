@@ -3,8 +3,10 @@ import { EventType, RelationType, type MatrixEvent, type Room } from "matrix-js-
 import { getClient } from "../../matrix/client";
 import {
   contentBlobUrl,
+  copyImageToClipboard,
   downloadContent,
   mediaFilename,
+  saveUrlAs,
   uploadBlob,
   useEncryptedMedia,
   useMxc,
@@ -18,7 +20,8 @@ import Avatar, { colorFor } from "../Avatar";
 import ExpressionPicker from "./ExpressionPicker";
 import CustomEmoji from "./CustomEmoji";
 import { formatBytes, formatTime, hasEmotes, isOnlyEmoji, isOnlyEmotes, renderBody, renderEmoteHtml, stripReplyFallback } from "./format";
-import { IconDownload, IconEdit, IconReply, IconSmile, IconStickerAdd, IconStickerSaved, IconTrash } from "../icons";
+import { IconCopy, IconDownload, IconEdit, IconFullscreen, IconReply, IconSmile, IconStickerAdd, IconStickerSaved, IconTrash } from "../icons";
+import ContextMenu, { type MenuItem } from "../ContextMenu";
 
 interface Props {
   room: Room;
@@ -323,14 +326,53 @@ function useContentUrl(content: Content, thumb: boolean) {
 
 function MediaImage({ content, onOpen, sticker }: { content: Content; onOpen(url: string, filename?: string): void; sticker?: boolean }) {
   const url = useContentUrl(content, false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const w = content.info?.w ?? 400;
   const h = content.info?.h ?? 300;
   const max = sticker ? 160 : 400;
   const scale = Math.min(1, max / w, max / h);
+  const filename = mediaFilename(content.body, content.info?.mimetype, sticker ? "figurinha" : "imagem");
+
+  const flash = (text: string) => {
+    setNotice(text);
+    window.setTimeout(() => setNotice((n) => (n === text ? null : n)), 2200);
+  };
+
+  const items: MenuItem[] = url
+    ? [
+        { type: "item", label: sticker ? "Salvar figurinha" : "Salvar imagem", icon: <IconDownload size={16} />, onClick: () => saveUrlAs(url, filename) },
+        {
+          type: "item",
+          label: "Copiar imagem",
+          icon: <IconCopy size={16} />,
+          onClick: () =>
+            void copyImageToClipboard(url)
+              .then(() => flash("Imagem copiada"))
+              .catch((e) => flash("Não foi possível copiar: " + (e instanceof Error ? e.message : String(e)))),
+        },
+        { type: "item", label: "Abrir em tela cheia", icon: <IconFullscreen size={16} />, onClick: () => onOpen(url, filename) },
+      ]
+    : [];
+
   return (
-    <div className="media-image" style={{ width: w * scale, height: h * scale }} onClick={() => url && onOpen(url, mediaFilename(content.body, content.info?.mimetype, sticker ? "figurinha" : "imagem"))}>
-      {url ? <img src={url} alt={content.body} /> : <div className="media-loading" />}
-    </div>
+    <>
+      <div
+        className="media-image"
+        style={{ width: w * scale, height: h * scale }}
+        onClick={() => url && onOpen(url, filename)}
+        onContextMenu={(e) => {
+          if (!url) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        {url ? <img src={url} alt={content.body} /> : <div className="media-loading" />}
+      </div>
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
+      {notice && <div className="toast">{notice}</div>}
+    </>
   );
 }
 

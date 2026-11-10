@@ -75,6 +75,8 @@ export interface AppearanceSettings {
   colors: ThemeColors;
   /** cores dos botões "Criar um servidor" e "Entrar em um servidor" (independem do tema) */
   railColors: { create: string; join: string };
+  /** cor dos botões de parar câmera/transmissão (e outros "parar") */
+  stopColor: string;
   fontScale: number;
   chatFont: "system" | "inter" | "serif" | "mono" | "rounded";
   density: "cozy" | "compact";
@@ -122,6 +124,8 @@ export interface VoiceSettings {
   debugStats: boolean;
   /** Na chamada, mostra só os blocos com vídeo (câmera ligada ou transmissão de tela) */
   hideNoVideo: boolean;
+  /** Na chamada, esconde as transmissões de tela que você não está assistindo */
+  hideUnwatchedStreams: boolean;
 }
 
 export interface AdvancedSettings {
@@ -129,22 +133,42 @@ export interface AdvancedSettings {
   livekitServiceUrl: string;
 }
 
+/** Tema criado pelo usuário (fica junto dos temas prontos). */
+export interface SavedTheme {
+  id: string;
+  name: string;
+  accent: string;
+  colors: ThemeColors;
+  railColors: { create: string; join: string };
+  stopColor: string;
+}
+
 interface SettingsState {
   appearance: AppearanceSettings;
   voice: VoiceSettings;
   advanced: AdvancedSettings;
+  /** temas salvos pelo usuário (não são apagados por "Restaurar padrões") */
+  savedThemes: SavedTheme[];
   setAppearance(p: Partial<AppearanceSettings>): void;
   setVoice(p: Partial<VoiceSettings>): void;
   setAdvanced(p: Partial<AdvancedSettings>): void;
   applyPreset(key: string): void;
+  /** Salva as cores atuais como tema; mesmo nome substitui o existente. Devolve o id. */
+  saveTheme(name: string): string;
+  applySavedTheme(id: string): void;
+  deleteSavedTheme(id: string): void;
   reset(): void;
 }
+
+/** Chave usada em appearance.theme para um tema salvo. */
+export const savedThemeKey = (id: string) => `saved:${id}`;
 
 const defaultAppearance: AppearanceSettings = {
   theme: "dark",
   accent: THEME_PRESETS.dark.accent,
   colors: { ...THEME_PRESETS.dark.colors },
   railColors: { create: "#23a55a", join: "#23a55a" },
+  stopColor: "#da373c",
   fontScale: 1,
   chatFont: "system",
   density: "cozy",
@@ -182,6 +206,7 @@ const defaultVoice: VoiceSettings = {
   webAudioMix: false,
   debugStats: false,
   hideNoVideo: false,
+  hideUnwatchedStreams: false,
 };
 
 export const useSettings = create<SettingsState>()(
@@ -190,6 +215,7 @@ export const useSettings = create<SettingsState>()(
       appearance: defaultAppearance,
       voice: defaultVoice,
       advanced: { livekitServiceUrl: "" },
+      savedThemes: [],
       setAppearance: (p) => set((s) => ({ appearance: { ...s.appearance, ...p } })),
       setVoice: (p) => set((s) => ({ voice: { ...s.voice, ...p } })),
       setAdvanced: (p) => set((s) => ({ advanced: { ...s.advanced, ...p } })),
@@ -199,6 +225,47 @@ export const useSettings = create<SettingsState>()(
           if (!p) return s;
           return { appearance: { ...s.appearance, theme: key, accent: p.accent, colors: { ...p.colors } } };
         }),
+      saveTheme: (name) => {
+        const trimmed = name.trim().slice(0, 40) || "Meu tema";
+        let id = "";
+        set((s) => {
+          const a = s.appearance;
+          const existing = s.savedThemes.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+          id = existing?.id ?? `t${Date.now().toString(36)}`;
+          const theme: SavedTheme = {
+            id,
+            name: trimmed,
+            accent: a.accent,
+            colors: { ...a.colors },
+            railColors: { ...a.railColors },
+            stopColor: a.stopColor,
+          };
+          const savedThemes = existing ? s.savedThemes.map((t) => (t.id === id ? theme : t)) : [...s.savedThemes, theme];
+          return { savedThemes, appearance: { ...a, theme: savedThemeKey(id) } };
+        });
+        return id;
+      },
+      applySavedTheme: (id) =>
+        set((s) => {
+          const t = s.savedThemes.find((x) => x.id === id);
+          if (!t) return s;
+          return {
+            appearance: {
+              ...s.appearance,
+              theme: savedThemeKey(id),
+              accent: t.accent,
+              colors: { ...t.colors },
+              railColors: { ...t.railColors },
+              stopColor: t.stopColor,
+            },
+          };
+        }),
+      deleteSavedTheme: (id) =>
+        set((s) => ({
+          savedThemes: s.savedThemes.filter((t) => t.id !== id),
+          // As cores continuam aplicadas; só deixa de apontar para o tema apagado
+          appearance: s.appearance.theme === savedThemeKey(id) ? { ...s.appearance, theme: "custom" } : s.appearance,
+        })),
       reset: () => set({ appearance: defaultAppearance, voice: defaultVoice, advanced: { livekitServiceUrl: "" } }),
     }),
     {
@@ -233,6 +300,15 @@ export const useSettings = create<SettingsState>()(
           },
           voice: { ...defaultVoice, ...p.voice },
           advanced: { ...current.advanced, ...p.advanced },
+          savedThemes: Array.isArray(p.savedThemes)
+            ? p.savedThemes
+                .filter((t) => t && typeof t.id === "string" && t.colors)
+                .map((t) => ({
+                  ...t,
+                  railColors: { ...defaultAppearance.railColors, ...t.railColors },
+                  stopColor: t.stopColor ?? defaultAppearance.stopColor,
+                }))
+            : [],
         };
       },
     },

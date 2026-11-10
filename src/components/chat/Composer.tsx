@@ -6,7 +6,7 @@ import { useAppStore } from "../../store/app";
 import { emoticonMap, getAvailablePacks } from "../../matrix/imagePacks";
 import { emoteFormatting, sendSticker } from "../../matrix/emotes";
 import ExpressionPicker from "./ExpressionPicker";
-import { stripReplyFallback } from "./format";
+import { formatBytes, stripReplyFallback } from "./format";
 import { IconPlus, IconSmile, IconSticker, IconX } from "../icons";
 
 function imageSize(file: File): Promise<{ w: number; h: number } | null> {
@@ -48,11 +48,22 @@ export async function sendFile(room: Room, file: File, replyTo?: string) {
   await c.sendMessage(room.roomId, content as never);
 }
 
+interface Attachment {
+  id: string;
+  file: File;
+  /** URL blob: da prévia (só imagens) */
+  preview?: string;
+}
+
 export default function Composer({ room, onSent }: { room: Room; onSent(): void }) {
   const c = getClient();
   const me = c.getUserId()!;
   const [text, setText] = useState("");
   const [uploading, setUploading] = useState<string | null>(null);
+  // Anexos aguardando envio (colar, arrastar ou escolher arquivo não envia na hora)
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const attachmentsRef = useRef<Attachment[]>([]);
+  attachmentsRef.current = attachments;
   const [picker, setPicker] = useState<"emoji" | "sticker" | null>(null);
   const emojiBtn = useRef<HTMLButtonElement>(null);
   const stickerBtn = useRef<HTMLButtonElement>(null);
@@ -69,6 +80,11 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
   useEffect(() => {
     setText(drafts.current[room.roomId] ?? "");
     ta.current?.focus();
+    // Anexos não passam de uma sala para outra
+    return () => {
+      attachmentsRef.current.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
+      setAttachments([]);
+    };
   }, [room.roomId]);
   useEffect(() => {
     drafts.current[room.roomId] = text;
@@ -125,9 +141,44 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
     }
   };
 
+  const addAttachments = (files: FileList | File[]) => {
+    const list = Array.from(files).map((file, i) => ({
+      id: `${Date.now()}-${i}-${file.name}`,
+      file,
+      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+    }));
+    if (!list.length) return;
+    setAttachments((cur) => [...cur, ...list].slice(0, 10));
+    ta.current?.focus();
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((cur) => {
+      const a = cur.find((x) => x.id === id);
+      if (a?.preview) URL.revokeObjectURL(a.preview);
+      return cur.filter((x) => x.id !== id);
+    });
+    ta.current?.focus();
+  };
+
   const send = async () => {
     const body = text.trim();
-    if (!body) return;
+    const files = editing ? [] : attachments;
+    if (!body && !files.length) return;
+    if (files.length) {
+      setAttachments([]);
+      const reply = replyTo;
+      if (reply) setReplyTo(room.roomId, undefined);
+      setText("");
+      lastTyping.current = 0;
+      c.sendTyping(room.roomId, false, 0).catch(() => undefined);
+      onSent();
+      // Texto primeiro (fica acima das imagens), depois os anexos
+      if (body) await sendText(body, reply);
+      await uploadFiles(files.map((a) => a.file), body ? undefined : reply);
+      files.forEach((a) => a.preview && URL.revokeObjectURL(a.preview));
+      return;
+    }
     setText("");
     lastTyping.current = 0;
     c.sendTyping(room.roomId, false, 0).catch(() => undefined);
@@ -144,6 +195,15 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
       } as never);
       return;
     }
+    const reply = replyTo;
+    if (reply) setReplyTo(room.roomId, undefined);
+    onSent();
+    await sendText(body, reply);
+  };
+
+  /** Envia uma mensagem de texto (com /me, emojis personalizados e resposta). */
+  const sendText = async (body: string, reply?: string) => {
+    const emotes = emoticonMap(getAvailablePacks(room));
     const content: Record<string, unknown> = { msgtype: MsgType.Text, body };
     if (body.startsWith("/me ")) {
       content.msgtype = MsgType.Emote;
@@ -151,20 +211,18 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
     }
     const fmt = emoteFormatting(content.body as string, emotes);
     if (fmt) Object.assign(content, fmt);
-    if (replyTo) {
-      content["m.relates_to"] = { "m.in_reply_to": { event_id: replyTo } };
-      setReplyTo(room.roomId, undefined);
-    }
-    onSent();
+    if (reply) content["m.relates_to"] = { "m.in_reply_to": { event_id: reply } };
     await c.sendMessage(room.roomId, content as never).catch((e) => alert("Falha ao enviar: " + e.message));
   };
 
-  const upload = async (files: FileList | File[]) => {
-    for (const f of Array.from(files)) {
+  /** Envia os anexos, um por vez (a resposta vai no primeiro). */
+  const uploadFiles = async (files: File[], reply?: string) => {
+    let replyTarget = reply;
+    for (const f of files) {
       setUploading(f.name);
       try {
-        await sendFile(room, f, replyTo);
-        if (replyTo) setReplyTo(room.roomId, undefined);
+        await sendFile(room, f, replyTarget);
+        replyTarget = undefined;
         onSent();
       } catch (e) {
         alert(`Falha ao enviar ${f.name}: ${e instanceof Error ? e.message : e}`);
@@ -213,7 +271,7 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (e.dataTransfer.files.length) void upload(e.dataTransfer.files);
+        if (e.dataTransfer.files.length) addAttachments(e.dataTransfer.files);
       }}
     >
       {(replyEv || editing) && (
@@ -240,7 +298,28 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
         </div>
       )}
       {uploading && <div className="composer-context">Enviando {uploading}…</div>}
-      <div className={`composer ${replyEv || editing ? "attached" : ""}`}>
+      {attachments.length > 0 && !editing && (
+        <div className={`composer-attachments ${replyEv ? "after-context" : ""}`}>
+          {attachments.map((a) => (
+            <div className="attachment-card" key={a.id} title={a.file.name}>
+              {a.preview ? (
+                <img src={a.preview} alt="" className="attachment-thumb" />
+              ) : (
+                <div className="attachment-thumb file">📄</div>
+              )}
+              <div className="attachment-name ellipsis">{a.file.name}</div>
+              <div className="attachment-size muted">{formatBytes(a.file.size)}</div>
+              <button className="attachment-remove" title="Remover anexo" onClick={() => removeAttachment(a.id)}>
+                <IconX size={14} />
+              </button>
+            </div>
+          ))}
+          <div className="attachment-hint muted">
+            <kbd>Enter</kbd> envia{attachments.length > 1 ? ` os ${attachments.length} arquivos` : ""}
+          </div>
+        </div>
+      )}
+      <div className={`composer ${replyEv || editing || (attachments.length > 0 && !editing) ? "attached" : ""}`}>
         <button className="composer-btn" title="Enviar arquivo" disabled={!canSend} onClick={() => fileInput.current?.click()}>
           <IconPlus size={18} />
         </button>
@@ -250,7 +329,7 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
           multiple
           hidden
           onChange={(e) => {
-            if (e.target.files?.length) void upload(e.target.files);
+            if (e.target.files?.length) addAttachments(e.target.files);
             e.target.value = "";
           }}
         />
@@ -269,7 +348,7 @@ export default function Composer({ room, onSent }: { room: Room; onSent(): void 
             const files = Array.from(e.clipboardData.files);
             if (files.length) {
               e.preventDefault();
-              void upload(files);
+              addAttachments(files);
             }
           }}
         />
