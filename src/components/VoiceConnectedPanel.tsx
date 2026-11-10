@@ -52,11 +52,21 @@ export default function VoiceConnectedPanel() {
       </div>
       {status === "connected" && (
         <div className="voice-panel-actions">
-          <button className={`btn small ${cameraOn ? "active" : "secondary"}`} onClick={toggleCamera}>
-            {cameraOn ? <IconVideoOff size={18} /> : <IconVideo size={18} />} Câmera
+          <button
+            className={`btn small ${cameraOn ? "active" : "secondary"}`}
+            title={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+            onClick={toggleCamera}
+          >
+            {cameraOn ? <IconVideoOff size={18} /> : <IconVideo size={18} />}
+            <span className="btn-label">Câmera</span>
           </button>
-          <button className={`btn small ${screenOn ? "active" : "secondary"}`} onClick={() => toggleScreenShare()}>
-            <IconScreenUp size={18} /> {screenOn ? "Parar" : "Transmitir"}
+          <button
+            className={`btn small ${screenOn ? "active" : "secondary"}`}
+            title={screenOn ? "Parar transmissão" : "Transmitir a tela"}
+            onClick={() => toggleScreenShare()}
+          >
+            <IconScreenUp size={18} />
+            <span className="btn-label">{screenOn ? "Parar" : "Transmitir"}</span>
           </button>
         </div>
       )}

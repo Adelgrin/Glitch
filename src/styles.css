@@ -972,6 +972,7 @@ input[type="color"]::-moz-color-swatch {
 
 /* painel de voz + usuário */
 .voice-panel {
+  container-type: inline-size;
   margin: 8px 8px 0;
   padding: 10px;
   border-radius: var(--radius);
@@ -1013,8 +1014,26 @@ input[type="color"]::-moz-color-swatch {
   gap: 6px;
   margin-top: 8px;
 }
+/* Câmera / Transmitir: dividem o espaço sem ultrapassar o painel */
 .voice-panel-actions .btn {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px;
+  gap: 5px;
+}
+.voice-panel-actions .btn svg {
+  flex-shrink: 0;
+}
+.voice-panel-actions .btn-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Barra lateral estreita: só os ícones (o nome aparece ao passar o mouse) */
+@container (max-width: 200px) {
+  .voice-panel-actions .btn-label {
+    display: none;
+  }
 }
 .user-panel {
   display: flex;
