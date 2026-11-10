@@ -35,6 +35,8 @@ import ContextMenu, { type MenuItem } from "../ContextMenu";
 import { insertIntoComposer } from "../UserCard";
 import {
   IconChat,
+  IconUsers,
+  IconUsersOff,
   IconChevronDown,
   IconEye,
   IconGrid,
@@ -58,10 +60,12 @@ interface TileData {
   p: VParticipant;
 }
 
-/** O bloco tem vídeo publicado agora (câmera ligada ou transmissão de tela)? */
-function tileHasVideo(t: TileData): boolean {
-  const pub = t.kind === "screen" ? t.p.screen : t.p.camera;
-  return !!pub && !pub.isMuted;
+/**
+ * Bloco de pessoa (avatar ou câmera). A câmera ligada conta como a própria pessoa,
+ * não como transmissão — só a tela compartilhada é transmissão.
+ */
+function isPersonTile(t: TileData): boolean {
+  return t.kind === "camera";
 }
 
 export default function CallView({ room }: { room: Room }) {
@@ -91,12 +95,12 @@ export default function CallView({ room }: { room: Room }) {
   // Transmissão (de outra pessoa) que você não está assistindo — a câmera conta como o próprio usuário
   const isUnwatchedStream = (t: TileData) => t.kind === "screen" && !t.p.isLocal && !watching[t.key];
   const unwatchedCount = tiles.filter(isUnwatchedStream).length;
-  // Modo "só vídeo": esconde blocos sem câmera/transmissão para caber mais lives na tela
-  const visibleTiles = tiles.filter((t) => (!hideNoVideo || tileHasVideo(t)) && !(hideUnwatched && isUnwatchedStream(t)));
+  // "Ocultar participantes" (hideNoVideo): esconde os blocos de pessoas — com ou sem câmera —
+  // e deixa só as transmissões de tela, para caber mais lives na tela
+  const visibleTiles = tiles.filter((t) => !(hideNoVideo && isPersonTile(t)) && !(hideUnwatched && isUnwatchedStream(t)));
   const ghosts = hideNoVideo ? [] : allGhosts;
-  const hiddenCount = tiles.length - visibleTiles.length + allGhosts.length - ghosts.length;
   const hiddenStreams = hideUnwatched ? unwatchedCount : 0;
-  const hiddenUsers = hiddenCount - hiddenStreams;
+  const hiddenUsers = hideNoVideo ? tiles.filter(isPersonTile).length + allGhosts.length : 0;
   const focusTile = focused ? tiles.find((t) => t.key === focused) : undefined;
 
   return (
@@ -137,12 +141,12 @@ export default function CallView({ room }: { room: Room }) {
               className={`icon-btn call-hide-novideo ${hideNoVideo ? "active" : ""}`}
               title={
                 hideNoVideo
-                  ? `Mostrar todos os participantes${hiddenUsers ? ` (${hiddenUsers} oculto${hiddenUsers > 1 ? "s" : ""})` : ""}`
-                  : "Ocultar participantes sem vídeo"
+                  ? `Mostrar participantes${hiddenUsers ? ` (${hiddenUsers} oculto${hiddenUsers > 1 ? "s" : ""})` : ""}`
+                  : "Ocultar participantes (câmeras incluídas) e mostrar só as transmissões"
               }
               onClick={() => setVoice({ hideNoVideo: !hideNoVideo })}
             >
-              {hideNoVideo ? <IconVideo /> : <IconVideoOff />}
+              {hideNoVideo ? <IconUsersOff /> : <IconUsers />}
               {hideNoVideo && hiddenUsers > 0 && <span className="call-hidden-count">{hiddenUsers}</span>}
             </button>
           )}
@@ -185,9 +189,11 @@ export default function CallView({ room }: { room: Room }) {
             <div className="call-empty">
               <IconVideoOff size={40} />
               <p>
-                {hideNoVideo
-                  ? "Ninguém está com câmera ou transmissão ligada agora."
-                  : "Todas as transmissões estão ocultas porque você não está assistindo nenhuma."}
+                {hideNoVideo && hideUnwatched
+                  ? "Os participantes estão ocultos e você não está assistindo nenhuma transmissão."
+                  : hideNoVideo
+                    ? "Os participantes estão ocultos e ninguém está transmitindo a tela agora."
+                    : "Todas as transmissões estão ocultas porque você não está assistindo nenhuma."}
               </p>
               <button className="btn secondary" onClick={() => setVoice({ hideNoVideo: false, hideUnwatchedStreams: false })}>
                 Mostrar todos os participantes
