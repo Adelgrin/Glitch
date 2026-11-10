@@ -8,6 +8,7 @@ import { setUserVolume, useVoice } from "../voice/voice";
 import Avatar from "./Avatar";
 import ProfileBanner from "./ProfileBanner";
 import Select, { roleOptions } from "./Select";
+import UserNote from "./UserNote";
 import { IconAt, IconChat, IconChevronDown, IconChevronRight, IconHash, IconSpeaker, IconX } from "./icons";
 
 type Presence = "online" | "unavailable" | "offline";
@@ -256,6 +257,8 @@ export function UserCard({ userId, roomId, onClose }: { userId: string; roomId?:
             <div className="user-info-value">{new Date(since).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</div>
           </div>
         )}
+
+        {!isMe && <UserNote userId={userId} className="user-card-field" />}
 
         {canPl && (
           <div className="user-card-field">

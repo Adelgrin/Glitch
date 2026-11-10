@@ -4388,3 +4388,37 @@ input[type="color"]::-moz-color-swatch {
 .channel-e2ee.header {
   opacity: 1;
 }
+
+/* ---------- nota pessoal sobre um usuário (só você vê) ---------- */
+.user-note-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.user-note-head .user-info-label {
+  margin: 0;
+}
+.user-note-input {
+  width: 100%;
+  resize: none;
+  min-height: 30px;
+  padding: 6px 8px !important;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+.user-note-input:hover {
+  background: var(--hover) !important;
+}
+.user-note-input:focus {
+  background: var(--input) !important;
+  border-color: var(--accent) !important;
+}
+.user-note-input::placeholder {
+  color: var(--muted);
+}

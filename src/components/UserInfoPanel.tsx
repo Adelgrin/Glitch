@@ -5,6 +5,7 @@ import { getJoinedSpaces } from "../matrix/rooms";
 import { useAppStore, useVersion } from "../store/app";
 import Avatar from "./Avatar";
 import ProfileBanner from "./ProfileBanner";
+import UserNote from "./UserNote";
 import { IconChevronDown, IconChevronRight, IconShieldAlert, IconShieldCheck } from "./icons";
 
 type Presence = "online" | "unavailable" | "offline";
@@ -87,6 +88,10 @@ export default function UserInfoPanel({ room, userId }: { room: Room; userId: st
           {copied ? "ID copiado!" : userId}
         </button>
         {status && <div className="user-info-status">{status}</div>}
+      </div>
+
+      <div className="user-info-card">
+        <UserNote userId={userId} />
       </div>
 
       <div className="user-info-card">
