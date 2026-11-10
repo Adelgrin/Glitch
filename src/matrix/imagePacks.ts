@@ -251,6 +251,26 @@ export async function uploadPackImages(
   return out;
 }
 
+/** A imagem (mxc://) já está no seu pacote pessoal? */
+export function userPackHas(url: string) {
+  return getUserPack().images.some((i) => i.url === url);
+}
+
+/**
+ * Adiciona uma imagem (ex.: figurinha enviada por outra pessoa) ao pacote pessoal.
+ * Devolve o atalho criado.
+ */
+export async function addToUserPack(entry: { url: string; body?: string; info?: ImageInfo }, usage: PackUsage[] = ["sticker"]) {
+  const content = structuredClone(getUserPack().content) as PackContent;
+  content.images = { ...(content.images ?? {}) };
+  const existing = Object.entries(content.images).find(([, img]) => img.url === entry.url);
+  if (existing) return existing[0];
+  const code = makeShortcode(entry.body || "figurinha", new Set(Object.keys(content.images)));
+  content.images[code] = { url: entry.url, body: entry.body || code, ...(entry.info ? { info: entry.info } : {}), usage };
+  await savePack({ kind: "user" }, content);
+  return code;
+}
+
 /** Id para um pacote novo de sala, a partir do nome. */
 export function newPackStateKey(room: Room, name: string) {
   const taken = new Set(room.currentState.getStateEvents(ROOM_EMOTES).map((e) => e.getStateKey() ?? ""));

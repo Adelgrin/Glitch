@@ -1,21 +1,31 @@
 import { useRef, useState } from "react";
 import { EventType, RelationType, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { getClient } from "../../matrix/client";
-import { useEncryptedMedia, useMxc, type EncryptedFileInfo } from "../../matrix/media";
+import {
+  contentBlobUrl,
+  downloadContent,
+  mediaFilename,
+  uploadBlob,
+  useEncryptedMedia,
+  useMxc,
+  type EncryptedFileInfo,
+  type MediaContent,
+} from "../../matrix/media";
+import { addToUserPack, userPackHas } from "../../matrix/imagePacks";
 import { anchorOf, useAppStore } from "../../store/app";
 import { useSettings } from "../../store/settings";
 import Avatar, { colorFor } from "../Avatar";
 import ExpressionPicker from "./ExpressionPicker";
 import CustomEmoji from "./CustomEmoji";
 import { formatBytes, formatTime, hasEmotes, isOnlyEmoji, isOnlyEmotes, renderBody, renderEmoteHtml, stripReplyFallback } from "./format";
-import { IconDownload, IconEdit, IconReply, IconSmile, IconTrash } from "../icons";
+import { IconDownload, IconEdit, IconReply, IconSmile, IconStickerAdd, IconStickerSaved, IconTrash } from "../icons";
 
 interface Props {
   room: Room;
   ev: MatrixEvent;
   grouped: boolean;
   canRedactOthers: boolean;
-  onOpenImage(url: string): void;
+  onOpenImage(url: string, filename?: string): void;
 }
 
 function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: Props) {
@@ -27,6 +37,8 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
   const timeFmt = useSettings((s) => s.appearance.timeFormat);
   const showSeconds = useSettings((s) => s.appearance.showSeconds);
   const [picker, setPicker] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [savingSticker, setSavingSticker] = useState(false);
   const reactBtn = useRef<HTMLButtonElement>(null);
 
   const sender = ev.getSender()!;
@@ -59,6 +71,47 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
 
   const remove = async () => {
     if (confirm("Apagar esta mensagem?")) await c.redactEvent(room.roomId, ev.getId()!);
+  };
+
+  // Imagens e figurinhas: baixar; figurinhas de outras pessoas: salvar no pacote pessoal
+  const isSticker = ev.getType() === EventType.Sticker;
+  const isImage = isSticker || content.msgtype === "m.image";
+  const stickerUrl = isSticker && typeof content.url === "string" ? (content.url as string) : null;
+  const alreadySaved = !!stickerUrl && userPackHas(stickerUrl);
+
+  const flash = (text: string) => {
+    setNotice(text);
+    window.setTimeout(() => setNotice((n) => (n === text ? null : n)), 2500);
+  };
+
+  const download = async () => {
+    try {
+      await downloadContent(content as MediaContent);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Falha ao baixar.");
+    }
+  };
+
+  const saveSticker = async () => {
+    if (savingSticker) return;
+    setSavingSticker(true);
+    try {
+      let url = stickerUrl;
+      // Figurinha criptografada: baixa, descriptografa e envia de novo para ter um mxc:// próprio
+      if (!url && content.file) {
+        const blobUrl = await contentBlobUrl(content as MediaContent);
+        if (!blobUrl) throw new Error("Não foi possível baixar a figurinha.");
+        const blob = await (await fetch(blobUrl)).blob();
+        url = await uploadBlob(blob, mediaFilename(content.body, content.info?.mimetype, "figurinha"));
+      }
+      if (!url) throw new Error("Figurinha sem imagem.");
+      const code = await addToUserPack({ url, body: typeof content.body === "string" ? content.body : undefined, info: content.info });
+      flash(`Figurinha salva no seu pacote como :${code}:`);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Falha ao salvar a figurinha.");
+    } finally {
+      setSavingSticker(false);
+    }
   };
 
   return (
@@ -106,6 +159,21 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
           <button className="icon-btn tiny" title="Responder" onClick={() => setReplyTo(room.roomId, ev.getId()!)}>
             <IconReply size={18} />
           </button>
+          {isImage && (
+            <button className="icon-btn tiny" title={isSticker ? "Baixar figurinha" : "Baixar imagem"} onClick={() => void download()}>
+              <IconDownload size={18} />
+            </button>
+          )}
+          {isSticker && !isMine && (
+            <button
+              className={`icon-btn tiny ${alreadySaved ? "active" : ""}`}
+              title={alreadySaved ? "Já está no seu pacote de figurinhas" : "Salvar figurinha no seu pacote"}
+              disabled={alreadySaved || savingSticker}
+              onClick={() => void saveSticker()}
+            >
+              {alreadySaved ? <IconStickerSaved size={18} /> : <IconStickerAdd size={18} />}
+            </button>
+          )}
           {isMine && content.msgtype && ["m.text", "m.emote", "m.notice"].includes(content.msgtype) && (
             <button className="icon-btn tiny" title="Editar" onClick={() => setEditing(room.roomId, ev.getId()!)}>
               <IconEdit size={18} />
@@ -127,6 +195,7 @@ function MessageItemInner({ room, ev, grouped, canRedactOthers, onOpenImage }: P
           )}
         </div>
       )}
+      {notice && <div className="toast">{notice}</div>}
     </div>
   );
 }
@@ -195,7 +264,7 @@ function MessageBody({
   body: string;
   myId: string;
   edited: boolean;
-  onOpenImage(url: string): void;
+  onOpenImage(url: string, filename?: string): void;
 }) {
   const content = ev.getContent();
   if (ev.getType() === EventType.RoomMessageEncrypted || ev.isDecryptionFailure()) {
@@ -252,14 +321,14 @@ function useContentUrl(content: Content, thumb: boolean) {
   return file ? encUrl : plainUrl;
 }
 
-function MediaImage({ content, onOpen, sticker }: { content: Content; onOpen(url: string): void; sticker?: boolean }) {
+function MediaImage({ content, onOpen, sticker }: { content: Content; onOpen(url: string, filename?: string): void; sticker?: boolean }) {
   const url = useContentUrl(content, false);
   const w = content.info?.w ?? 400;
   const h = content.info?.h ?? 300;
   const max = sticker ? 160 : 400;
   const scale = Math.min(1, max / w, max / h);
   return (
-    <div className="media-image" style={{ width: w * scale, height: h * scale }} onClick={() => url && onOpen(url)}>
+    <div className="media-image" style={{ width: w * scale, height: h * scale }} onClick={() => url && onOpen(url, mediaFilename(content.body, content.info?.mimetype, sticker ? "figurinha" : "imagem"))}>
       {url ? <img src={url} alt={content.body} /> : <div className="media-loading" />}
     </div>
   );

@@ -7,7 +7,8 @@ import { useSettings } from "../../store/settings";
 import { MessageItem } from "./MessageItem";
 import Composer from "./Composer";
 import { formatDay } from "./format";
-import { IconSettings, IconUserCircle, IconUsers, IconX } from "../icons";
+import { IconDownload, IconSettings, IconUserCircle, IconUsers, IconX } from "../icons";
+import { saveUrlAs } from "../../matrix/media";
 import RoomIcon from "../RoomIcon";
 
 const SHOWN = new Set<string>([EventType.RoomMessage, EventType.RoomMessageEncrypted, EventType.Sticker, EventType.RoomMember]);
@@ -46,7 +47,7 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
   const prevHeight = useRef<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [reachedStart, setReachedStart] = useState(false);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null);
 
   const events = room.getLiveTimeline().getEvents().filter(visible);
   const lastId = events[events.length - 1]?.getId();
@@ -212,7 +213,7 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
                   ev={ev}
                   grouped={grouped}
                   canRedactOthers={myPl >= redactPl}
-                  onOpenImage={setLightbox}
+                  onOpenImage={(url, name) => setLightbox({ url, name: name ?? "imagem" })}
                 />
               </div>
             );
@@ -236,10 +237,15 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
       </div>
       {lightbox && (
         <div className="lightbox" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="" />
-          <a className="lightbox-open" href={lightbox} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-            Abrir original
-          </a>
+          <img src={lightbox.url} alt="" />
+          <div className="lightbox-actions" onClick={(e) => e.stopPropagation()}>
+            <button className="btn primary small" onClick={() => saveUrlAs(lightbox.url, lightbox.name)}>
+              <IconDownload size={16} /> Baixar
+            </button>
+            <a className="lightbox-open" href={lightbox.url} target="_blank" rel="noreferrer">
+              Abrir original
+            </a>
+          </div>
         </div>
       )}
     </div>

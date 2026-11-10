@@ -1460,6 +1460,18 @@ input[type="color"]::-moz-color-swatch {
   color: #fff;
   font-size: 0.85rem;
 }
+.lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.icon-btn.tiny:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.message-toolbar .icon-btn.active {
+  color: var(--green);
+}
 
 /* composer */
 .composer-wrap {

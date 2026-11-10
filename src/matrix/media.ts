@@ -82,6 +82,58 @@ export function fetchEncrypted(file: EncryptedFileInfo, mime?: string): Promise<
   return p;
 }
 
+/** Campos de mídia do conteúdo de uma mensagem (m.image, m.sticker…). */
+export interface MediaContent {
+  body?: unknown;
+  url?: string;
+  file?: EncryptedFileInfo;
+  info?: { mimetype?: string; w?: number; h?: number; size?: number };
+}
+
+/** URL blob: do arquivo original de uma mensagem de mídia (descriptografa se precisar). */
+export function contentBlobUrl(content: MediaContent): Promise<string | null> {
+  if (content.file) return fetchEncrypted(content.file, content.info?.mimetype);
+  if (content.url) return fetchMxc(content.url);
+  return Promise.resolve(null);
+}
+
+const EXT: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+  "image/avif": "avif",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+};
+
+/** Nome de arquivo seguro para salvar, com extensão a partir do tipo quando faltar. */
+export function mediaFilename(body: unknown, mime?: string, fallback = "imagem") {
+  let name = (typeof body === "string" && body.trim()) || fallback;
+  name = name.replace(/[\\/:*?"<>|\n\r]+/g, "_").slice(0, 120);
+  if (!/\.[a-z0-9]{2,5}$/i.test(name) && mime) name += `.${EXT[mime] ?? mime.split("/")[1]?.split("+")[0] ?? "bin"}`;
+  return name;
+}
+
+/** Salva uma URL (blob:) como arquivo — o navegador/app pergunta onde salvar ou usa Downloads. */
+export function saveUrlAs(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** Baixa o arquivo original de uma mensagem de mídia. */
+export async function downloadContent(content: MediaContent) {
+  const url = await contentBlobUrl(content);
+  if (!url) throw new Error("Não foi possível baixar o arquivo.");
+  saveUrlAs(url, mediaFilename(content.body, content.info?.mimetype));
+}
+
 /** Hook: devolve uma URL blob: para um mxc:// (com autenticação). */
 export function useMxc(mxc?: string | null, size?: number, method: "crop" | "scale" = "crop"): string | undefined {
   const [url, setUrl] = useState<string | undefined>();
