@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Room } from "matrix-js-sdk";
 import type { Track } from "livekit-client";
 import { getClient } from "../../matrix/client";
 import { useSettings } from "../../store/settings";
-import { anchorOf, useAppStore } from "../../store/app";
+import { anchorOf, useAppStore, type ProfileAnchor } from "../../store/app";
+import { startDm } from "../../matrix/rooms";
 import {
   getDownlinkStats,
   joinVoice,
   leaveVoice,
   resumeAudio,
   setFocused,
+  setStreamMuted,
   setStreamVolume,
+  setUserMuted,
   setUserVolume,
   setWatching,
   tileKey,
@@ -28,25 +31,23 @@ import { useCallColor } from "../../matrix/profileStyle";
 import Avatar, { colorFor } from "../Avatar";
 import ChatView from "../chat/ChatView";
 import RoomIcon from "../RoomIcon";
+import ContextMenu, { type MenuItem } from "../ContextMenu";
+import { insertIntoComposer } from "../UserCard";
 import {
   IconChat,
   IconChevronDown,
   IconEye,
-  IconEyeOff,
-  IconFocus,
-  IconFullscreen,
   IconGrid,
   IconHeadphones,
   IconHeadphonesOff,
   IconMic,
   IconMicOff,
   IconPhoneOff,
-  IconPip,
   IconScreenUp,
   IconShieldCheck,
   IconVideo,
   IconVideoOff,
-  IconVolume,
+  IconVolumeOff,
 } from "../icons";
 
 interface TileData {
@@ -159,14 +160,18 @@ export default function CallView({ room }: { room: Room }) {
               </button>
             </div>
           ) : (
-            <div className={`tile-grid n${Math.min(visibleTiles.length + ghosts.length, 9)}`}>
-              {visibleTiles.map((t) => (
-                <Tile key={t.key} tile={t} room={room} />
-              ))}
-              {ghosts.map((g) => (
-                <GhostTile key={g.userId} room={room} userId={g.userId} />
-              ))}
-            </div>
+            <FitGrid count={visibleTiles.length + ghosts.length}>
+              {(avatarSize) => (
+                <>
+                  {visibleTiles.map((t) => (
+                    <Tile key={t.key} tile={t} room={room} avatarSize={avatarSize} />
+                  ))}
+                  {ghosts.map((g) => (
+                    <GhostTile key={g.userId} room={room} userId={g.userId} avatarSize={avatarSize} />
+                  ))}
+                </>
+              )}
+            </FitGrid>
           )}
           {debugStats && <CallStats />}
         </div>
@@ -225,15 +230,30 @@ function VideoEl({ track, mirror, fit }: { track: Track; mirror?: boolean; fit: 
   return <video ref={ref} autoPlay playsInline muted className={`tile-video ${mirror ? "mirror" : ""} fit-${fit}`} />;
 }
 
-function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focused?: boolean; small?: boolean }) {
+function Tile({
+  tile,
+  room,
+  focused,
+  small,
+  avatarSize,
+}: {
+  tile: TileData;
+  room: Room;
+  focused?: boolean;
+  small?: boolean;
+  /** tamanho do avatar quando a grade calcula o tamanho dos blocos */
+  avatarSize?: number;
+}) {
   const { p, kind, key } = tile;
   const c = getClient();
   const watching = useVoice((s) => s.watching[key]);
   const deafened = useVoice((s) => s.deafened);
-  const userVolume = useSettings((s) => (kind === "screen" ? s.voice.streamVolumes : s.voice.userVolumes)[p.userId] ?? 100);
+  const cameraOn = useVoice((s) => s.cameraOn);
+  const volume = useSettings((s) => (kind === "screen" ? s.voice.streamVolumes : s.voice.userVolumes)[p.userId] ?? 100);
+  const mutedForMe = useSettings((s) => !!(kind === "screen" ? s.voice.streamMuted : s.voice.userMuted)?.[p.userId]);
   const openModal = useAppStore((s) => s.openModal);
   const ref = useRef<HTMLDivElement>(null);
-  const [volOpen, setVolOpen] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const member = room.getMember(p.userId);
   const name = member?.name ?? c.getUser(p.userId)?.displayName ?? p.userId;
   const callColor = useCallColor(p.userId);
@@ -242,6 +262,7 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
   const isWatching = p.isLocal || !!watching;
   const track = pub?.track;
   const showVideo = hasVideo && isWatching && !!track;
+  const avatar = avatarSize ?? (small ? 48 : focused ? 128 : 88);
 
   const fullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -256,15 +277,96 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
       /* não suportado */
     }
   };
+  const openProfile = (anchor: ProfileAnchor) => openModal({ type: "userProfile", userId: p.userId, roomId: room.roomId, anchor });
+  const sendMessage = async () => {
+    const rid = await startDm(p.userId);
+    useAppStore.getState().selectSpace(null);
+    useAppStore.getState().selectRoom(rid);
+  };
+
+  /** Itens do menu de botão direito (como no Discord). */
+  const menuItems = (at: { x: number; y: number }): MenuItem[] => {
+    const items: MenuItem[] = [];
+    const header = (
+      <>
+        <Avatar mxc={member?.getMxcAvatarUrl()} name={name} id={p.userId} size={28} />
+        <span className="ellipsis">
+          {kind === "screen" ? (p.isLocal ? "Sua transmissão" : `Transmissão de ${name}`) : p.isLocal ? `${name} (você)` : name}
+        </span>
+      </>
+    );
+    items.push({ type: "header", content: header });
+    const videoItems: MenuItem[] = [];
+    if (showVideo) {
+      videoItems.push(
+        { type: "item", label: focused ? "Sair do foco" : "Focar", onClick: () => setFocused(focused ? null : key) },
+        { type: "item", label: "Tela cheia", onClick: fullscreen },
+        { type: "item", label: "Picture-in-picture", onClick: () => void pip() },
+      );
+    }
+
+    if (kind === "screen") {
+      if (p.isLocal) {
+        items.push({ type: "item", label: "Parar transmissão", danger: true, onClick: () => void toggleScreenShare(false) });
+      } else {
+        items.push(
+          { type: "slider", label: "Volume da transmissão", value: volume, min: 0, max: 200, format: (v) => `${v}%`, onChange: (v) => setStreamVolume(p.userId, v) },
+          { type: "check", label: "Silenciar transmissão", checked: mutedForMe, onChange: (v) => setStreamMuted(p.userId, v) },
+          { type: "separator" },
+          isWatching
+            ? { type: "item", label: "Parar de assistir", onClick: () => setWatching(p.identity, "screen", false) }
+            : { type: "item", label: "Assistir transmissão", onClick: () => setWatching(p.identity, "screen", true) },
+        );
+      }
+      if (videoItems.length) items.push(...videoItems);
+      if (!p.isLocal) items.push({ type: "separator" }, { type: "item", label: `Ver perfil de ${name}`, onClick: () => openProfile({ ...at, w: 0, h: 0 }) });
+      return items;
+    }
+
+    // Bloco de pessoa (câmera/avatar)
+    items.push({ type: "item", label: "Ver perfil", onClick: () => openProfile({ ...at, w: 0, h: 0 }) });
+    if (p.isLocal) {
+      items.push({ type: "item", label: cameraOn ? "Desligar câmera" : "Ligar câmera", onClick: () => void toggleCamera() });
+      if (videoItems.length) items.push({ type: "separator" }, ...videoItems);
+      return items;
+    }
+    items.push(
+      { type: "item", label: "Enviar mensagem", onClick: () => void sendMessage() },
+      { type: "item", label: "Mencionar", onClick: () => insertIntoComposer(`${p.userId} `) },
+      { type: "separator" },
+      { type: "slider", label: "Volume do usuário", value: volume, min: 0, max: 200, format: (v) => `${v}%`, onChange: (v) => setUserVolume(p.userId, v) },
+      { type: "check", label: "Silenciar", checked: mutedForMe, danger: true, onChange: (v) => setUserMuted(p.userId, v) },
+    );
+    if (hasVideo) {
+      items.push(
+        { type: "separator" },
+        isWatching
+          ? { type: "item", label: "Ocultar câmera", onClick: () => setWatching(p.identity, "camera", false) }
+          : { type: "item", label: "Ver câmera", onClick: () => setWatching(p.identity, "camera", true) },
+      );
+      if (videoItems.length) items.push(...videoItems);
+    }
+    items.push({ type: "separator" }, { type: "item", label: "Copiar ID do usuário", onClick: () => void navigator.clipboard.writeText(p.userId) });
+    return items;
+  };
 
   return (
     <div
       ref={ref}
-      className={`tile ${kind} ${p.speaking && kind === "camera" ? "speaking" : ""} ${focused ? "focused" : ""} ${small ? "small" : ""}`}
+      className={`tile ${kind} ${p.speaking && kind === "camera" ? "speaking" : ""} ${focused ? "focused" : ""} ${small ? "small" : ""} ${menu ? "menu-open" : ""}`}
       style={{ ["--tile-color" as string]: callColor ?? colorFor(p.userId) }}
-      onDoubleClick={fullscreen}
+      // Dois cliques: foca o bloco; dois cliques no bloco em foco: desfoca
+      onDoubleClick={(e) => {
+        if ((e.target as Element).closest("button")) return;
+        setFocused(focused ? null : key);
+      }}
+      // Na faixa de miniaturas (modo foco), um clique troca o bloco em foco
       onClick={() => {
-        if (small || (!focused && showVideo)) setFocused(key);
+        if (small) setFocused(key);
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
       }}
     >
       {showVideo ? (
@@ -272,7 +374,7 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
       ) : kind === "screen" ? (
         <div className="tile-stream-placeholder">
           <div className="tile-stream-bg">
-            <Avatar mxc={member?.getMxcAvatarUrl()} name={name} id={p.userId} size={small ? 40 : 80} />
+            <Avatar mxc={member?.getMxcAvatarUrl()} name={name} id={p.userId} size={small ? 40 : Math.round(avatar * 0.9)} />
           </div>
           {!small && (
             <>
@@ -292,7 +394,7 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
         </div>
       ) : (
         <div className="tile-avatar">
-          <Avatar mxc={member?.getMxcAvatarUrl()} name={name} id={p.userId} size={small ? 48 : focused ? 128 : 88} speaking={p.speaking} />
+          <Avatar mxc={member?.getMxcAvatarUrl()} name={name} id={p.userId} size={avatar} speaking={p.speaking} />
           {hasVideo && !isWatching && !small && (
             <button
               className="btn secondary small tile-watch-cam"
@@ -311,61 +413,24 @@ function Tile({ tile, room, focused, small }: { tile: TileData; room: Room; focu
         {kind === "screen" && <span className="live-badge">AO VIVO</span>}
         {!p.isLocal && <QualityBadge identity={p.identity} />}
         {kind === "camera" && (p.micMuted || (p.isLocal && deafened)) && <IconMicOff size={14} className="danger" />}
+        {mutedForMe && (
+          <span className="tile-muted-for-me" title="Silenciado por você">
+            <IconVolumeOff size={14} />
+          </span>
+        )}
         <span className="ellipsis">{p.isLocal && kind === "screen" ? "Sua transmissão" : name}</span>
       </div>
 
-      <div className="tile-actions" onClick={(e) => e.stopPropagation()}>
-        {!p.isLocal && (
-          <div className="tile-vol">
-            <button className="icon-btn tiny" title="Volume" onClick={() => setVolOpen((v) => !v)}>
-              <IconVolume size={16} />
-            </button>
-            {volOpen && (
-              <div className="tile-vol-pop">
-                <input
-                  type="range"
-                  min={0}
-                  max={200}
-                  value={userVolume}
-                  onChange={(e) =>
-                    kind === "screen"
-                      ? setStreamVolume(p.userId, Number(e.target.value))
-                      : setUserVolume(p.userId, Number(e.target.value))
-                  }
-                />
-                <span>{userVolume}%</span>
-              </div>
-            )}
-          </div>
-        )}
-        {showVideo && (
-          <button className="icon-btn tiny" title="Picture-in-picture" onClick={pip}>
-            <IconPip size={16} />
-          </button>
-        )}
-        {showVideo && (
-          <button className="icon-btn tiny" title={focused ? "Sair do foco" : "Focar"} onClick={() => setFocused(focused ? null : key)}>
-            <IconFocus size={16} />
-          </button>
-        )}
-        <button className="icon-btn tiny" title="Tela cheia" onClick={fullscreen}>
-          <IconFullscreen size={16} />
-        </button>
-        {!p.isLocal && hasVideo && isWatching && (
-          <button
-            className="icon-btn tiny"
-            title={kind === "screen" ? "Parar de assistir" : "Ocultar câmera"}
-            onClick={() => setWatching(p.identity, kind, false)}
-          >
-            <IconEyeOff size={16} />
-          </button>
-        )}
-        {!p.isLocal && (
-          <button className="icon-btn tiny" title="Perfil" onClick={(e) => openModal({ type: "userProfile", userId: p.userId, roomId: room.roomId, anchor: anchorOf(e.currentTarget) })}>
+      {/* Só a seta do perfil; o resto fica no menu de botão direito */}
+      {!p.isLocal && (
+        <div className="tile-actions" onClick={(e) => e.stopPropagation()}>
+          <button className="icon-btn tiny" title="Perfil" onClick={(e) => openProfile(anchorOf(e.currentTarget))}>
             <IconChevronDown size={16} />
           </button>
-        )}
-      </div>
+        </div>
+      )}
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />}
     </div>
   );
 }
@@ -408,13 +473,58 @@ function CallStats() {
   );
 }
 
-function GhostTile({ room, userId }: { room: Room; userId: string }) {
+/**
+ * Grade que ocupa o espaço disponível: mede a área e escolhe quantas colunas deixam
+ * os blocos (16:9) o maior possível, centralizados — como no Discord.
+ */
+function FitGrid({ count, children }: { count: number; children(avatarSize: number): React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const GAP = 12;
+  const RATIO = 16 / 9;
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  let best = { w: 0, h: 0 };
+  if (box.w > 0 && box.h > 0 && count > 0) {
+    for (let cols = 1; cols <= count; cols++) {
+      const rows = Math.ceil(count / cols);
+      let w = (box.w - GAP * (cols - 1)) / cols;
+      let h = w / RATIO;
+      if (h * rows + GAP * (rows - 1) > box.h) {
+        h = (box.h - GAP * (rows - 1)) / rows;
+        w = h * RATIO;
+      }
+      if (w > best.w) best = { w, h };
+    }
+  }
+  const tileW = Math.max(0, Math.floor(best.w));
+  const tileH = Math.max(0, Math.floor(best.h));
+  // Avatar acompanha o tamanho do bloco (com limites)
+  const avatarSize = Math.round(Math.min(180, Math.max(48, tileH * 0.4)));
+
+  return (
+    <div ref={ref} className="fit-grid" style={{ ["--tile-w" as string]: `${tileW}px`, ["--tile-h" as string]: `${tileH}px`, gap: GAP }}>
+      {tileW > 0 && children(avatarSize)}
+    </div>
+  );
+}
+
+function GhostTile({ room, userId, avatarSize = 88 }: { room: Room; userId: string; avatarSize?: number }) {
   const m = room.getMember(userId);
   const callColor = useCallColor(userId);
   return (
     <div className="tile camera ghost" style={{ ["--tile-color" as string]: callColor ?? colorFor(userId) }}>
       <div className="tile-avatar">
-        <Avatar mxc={m?.getMxcAvatarUrl()} name={m?.name ?? userId} id={userId} size={88} />
+        <Avatar mxc={m?.getMxcAvatarUrl()} name={m?.name ?? userId} id={userId} size={avatarSize} />
       </div>
       <div className="tile-label">
         <span className="ellipsis">{m?.name ?? userId}</span>

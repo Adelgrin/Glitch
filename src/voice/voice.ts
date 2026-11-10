@@ -426,25 +426,31 @@ function refresh() {
   useVoice.setState({ participants: list });
 }
 
+/** Volume efetivo (0–2) de uma pessoa ou da transmissão dela, já considerando silenciar/ensurdecer. */
+function effectiveVolume(userId: string, kind: "user" | "stream", deafened: boolean) {
+  if (deafened) return 0;
+  const v = useSettings.getState().voice;
+  if (kind === "user") return v.userMuted?.[userId] ? 0 : (v.userVolumes[userId] ?? 100) / 100;
+  return v.streamMuted?.[userId] ? 0 : (v.streamVolumes[userId] ?? 100) / 100;
+}
+
 function applyVolumes() {
   if (nativeActive) {
     const { participants, deafened } = useVoice.getState();
-    const { userVolumes } = useSettings.getState().voice;
     const volumes: Record<string, number> = {};
     for (const p of participants) {
       if (p.isLocal) continue;
-      volumes[p.identity] = deafened ? 0 : (userVolumes[p.userId] ?? 100) / 100;
+      volumes[p.identity] = effectiveVolume(p.userId, "user", deafened);
     }
     void nativeSetVolumes(volumes);
     return;
   }
   if (!lk) return;
   const { deafened } = useVoice.getState();
-  const { userVolumes, streamVolumes } = useSettings.getState().voice;
   for (const p of lk.remoteParticipants.values()) {
     const uid = resolveUserId(p.identity);
-    p.setVolume(deafened ? 0 : (userVolumes[uid] ?? 100) / 100, Track.Source.Microphone);
-    p.setVolume(deafened ? 0 : (streamVolumes[uid] ?? 100) / 100, Track.Source.ScreenShareAudio);
+    p.setVolume(effectiveVolume(uid, "user", deafened), Track.Source.Microphone);
+    p.setVolume(effectiveVolume(uid, "stream", deafened), Track.Source.ScreenShareAudio);
   }
 }
 
@@ -1038,6 +1044,19 @@ export function setStreamVolume(userId: string, vol: number) {
   applyVolumes();
 }
 
+/** Silencia uma pessoa (ou a transmissão dela) só para você. */
+export function setUserMuted(userId: string, muted: boolean) {
+  const v = useSettings.getState().voice;
+  useSettings.getState().setVoice({ userMuted: { ...v.userMuted, [userId]: muted } });
+  applyVolumes();
+}
+
+export function setStreamMuted(userId: string, muted: boolean) {
+  const v = useSettings.getState().voice;
+  useSettings.getState().setVoice({ streamMuted: { ...v.streamMuted, [userId]: muted } });
+  applyVolumes();
+}
+
 export async function switchDevice(kind: MediaDeviceKind, deviceId: string) {
   if (nativeActive) {
     // IDs da webview (enumerateDevices) não correspondem aos do áudio nativo
@@ -1127,7 +1146,12 @@ export function getLkRoom(): LkRoom | null {
 
 /** Re-aplica política de assinatura quando as configurações mudam. */
 useSettings.subscribe((s, prev) => {
-  if (s.voice.userVolumes !== prev.voice.userVolumes || s.voice.streamVolumes !== prev.voice.streamVolumes) {
+  if (
+    s.voice.userVolumes !== prev.voice.userVolumes ||
+    s.voice.streamVolumes !== prev.voice.streamVolumes ||
+    s.voice.userMuted !== prev.voice.userMuted ||
+    s.voice.streamMuted !== prev.voice.streamMuted
+  ) {
     applyVolumes();
   }
 });

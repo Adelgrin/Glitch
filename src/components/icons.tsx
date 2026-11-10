@@ -40,6 +40,7 @@ export const IconEye = make(<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11
 export const IconEyeOff = make(<><path d="m2 2 20 20" /><path d="M6.7 6.7C3.6 8.6 2 12 2 12s4 8 10 8a10 10 0 0 0 5.3-1.5M10 4.2A9 9 0 0 1 12 4c7 0 10 8 10 8a17 17 0 0 1-2.2 3.3" /></>);
 export const IconGrid = make(<><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></>);
 export const IconVolume = make(<><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /></>);
+export const IconVolumeOff = make(<><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="m22 9-6 6M16 9l6 6" /></>);
 export const IconChat = make(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />);
 export const IconLogout = make(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></>);
 export const IconSignal = make(<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4v16" />);

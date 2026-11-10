@@ -109,6 +109,9 @@ export interface VoiceSettings {
   /** volume por usuário (0–200) */
   userVolumes: Record<string, number>;
   streamVolumes: Record<string, number>;
+  /** silenciados só para você (mantém o volume escolhido para quando dessilenciar) */
+  userMuted: Record<string, boolean>;
+  streamMuted: Record<string, boolean>;
   /**
    * Mistura o áudio remoto via Web Audio (padrão do LiveKit). Em alguns sistemas
    * (Linux/Electron, sample rate do AudioContext diferente do hardware) gera áudio
@@ -174,6 +177,8 @@ const defaultVoice: VoiceSettings = {
   screenAudio: true,
   userVolumes: {},
   streamVolumes: {},
+  userMuted: {},
+  streamMuted: {},
   webAudioMix: false,
   debugStats: false,
   hideNoVideo: false,
