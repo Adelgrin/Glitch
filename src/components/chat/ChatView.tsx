@@ -7,7 +7,8 @@ import { useSettings } from "../../store/settings";
 import { MessageItem } from "./MessageItem";
 import Composer from "./Composer";
 import { formatDay } from "./format";
-import { IconAt, IconHash, IconSettings, IconSpeaker, IconUserCircle, IconUsers, IconX } from "../icons";
+import { IconSettings, IconUserCircle, IconUsers, IconX } from "../icons";
+import RoomIcon from "../RoomIcon";
 
 const SHOWN = new Set<string>([EventType.RoomMessage, EventType.RoomMessageEncrypted, EventType.Sticker, EventType.RoomMember]);
 const GROUP_MS = 7 * 60 * 1000;
@@ -129,7 +130,7 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
   return (
     <div className={`chat ${embedded ? "embedded" : ""}`}>
       <header className="chat-header">
-        {isDm ? <IconAt size={22} className="muted" /> : voice ? <IconSpeaker size={22} className="muted" /> : <IconHash size={22} className="muted" />}
+        <RoomIcon room={room} size={26} className="header-icon" />
         <span className="chat-title ellipsis">{isDm && partner ? partner.name : room.name}</span>
         {topic && !embedded && (
           <>
@@ -179,8 +180,8 @@ export default function ChatView({ room, showMembersToggle, embedded, onClose }:
         <div className="messages" ref={scrollRef} onScroll={onScroll}>
           {reachedStart ? (
             <div className="channel-start">
-              <div className="channel-start-icon">{isDm ? "@" : "#"}</div>
-              <h1>{isDm ? (partner?.name ?? room.name) : `Boas-vindas a #${room.name}!`}</h1>
+              <RoomIcon room={room} size={72} className="channel-start-icon" />
+              <h1>{isDm ? (partner?.name ?? room.name) : `Boas-vindas a ${voice ? "" : "#"}${room.name}!`}</h1>
               <p className="muted">
                 {isDm ? "Este é o começo do seu histórico de mensagens diretas." : "Este é o começo do canal."}
               </p>

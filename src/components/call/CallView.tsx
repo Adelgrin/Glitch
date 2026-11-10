@@ -27,6 +27,7 @@ import { useRtcMembers } from "../../voice/useRtcMembers";
 import { useCallColor } from "../../matrix/profileStyle";
 import Avatar, { colorFor } from "../Avatar";
 import ChatView from "../chat/ChatView";
+import RoomIcon from "../RoomIcon";
 import {
   IconChat,
   IconChevronDown,
@@ -43,7 +44,6 @@ import {
   IconPip,
   IconScreenUp,
   IconShieldCheck,
-  IconSpeaker,
   IconVideo,
   IconVideoOff,
   IconVolume,
@@ -93,7 +93,7 @@ export default function CallView({ room }: { room: Room }) {
     <div className="call-layout">
       <div className="call">
         <header className="chat-header call-header">
-          <IconSpeaker size={22} className="muted" />
+          <RoomIcon room={room} size={26} className="header-icon" />
           <span className="chat-title ellipsis">{room.name}</span>
           {connectedHere && encrypted && (
             <span className="call-e2ee" title="Mídia criptografada ponta a ponta">
@@ -193,7 +193,10 @@ function Lobby({ room, members, connecting }: { room: Room; members: string[]; c
           return <Avatar key={id} mxc={m?.getMxcAvatarUrl()} name={m?.name ?? id} id={id} size={72} />;
         })}
       </div>
-      <h2>{room.name}</h2>
+      <h2 className="lobby-title">
+        <RoomIcon room={room} size={36} />
+        <span>{room.name}</span>
+      </h2>
       <p className="muted">
         {members.length === 0
           ? "Ninguém está aqui agora."
