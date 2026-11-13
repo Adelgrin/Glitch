@@ -408,6 +408,16 @@ function VoiceChannelItem({ roomId, spaceId, info }: { roomId: string; spaceId: 
           <span className="channel-actions">
             <button
               className="icon-btn tiny"
+              title="Convidar"
+              onClick={(e) => {
+                e.stopPropagation();
+                openModal({ type: "invite", roomId: spaceId });
+              }}
+            >
+              <IconUserPlus size={14} />
+            </button>
+            <button
+              className="icon-btn tiny"
               title="Editar canal"
               onClick={(e) => {
                 e.stopPropagation();
