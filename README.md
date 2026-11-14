@@ -161,7 +161,7 @@ O workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) comp
    - `Glitch-0.1.6-portable.exe`
    - `.AppImage`, `.deb` e `.tar.gz` para Linux (se a parte do Linux falhar, a release sai só com os do Windows)
 
-As notas da release são geradas a partir dos commits/PRs desde a versão anterior. Se a release daquela versão já existir, o workflow não faz nada — então commits que mexem no `package.json` sem trocar a versão não geram release repetida. Também dá para disparar à mão em **Actions → Release → Run workflow**. Se as três versões estiverem diferentes, o workflow avisa (mas publica com a do `package.json`).
+As notas da release são geradas a partir dos commits/PRs desde a versão anterior. O workflow roda sozinho em todo push na `main`, sem precisar clicar em nada: se a release daquela versão já existir, ele para em poucos segundos sem compilar — então commits que não trocam a versão não geram release repetida. Também dá para disparar à mão em **Actions → Release → Run workflow**. Se as três versões estiverem diferentes, o workflow avisa (mas publica com a do `package.json`).
 
 Os executáveis não são assinados digitalmente, então o Windows SmartScreen pode avisar na primeira execução ("Mais informações → Executar assim mesmo").
 
