@@ -150,6 +150,21 @@ Gera AppImage, `.deb`, `.rpm` e `.tar.gz` em `release/`.
 - Desinstalar: `sudo apt remove glitch` ou `sudo dnf remove glitch`. Os dados ficam em `~/.config/Glitch`.
 - Compartilhar tela no Wayland usa o seletor do próprio sistema (PipeWire + xdg-desktop-portal, padrão no GNOME e KDE). Áudio do sistema na transmissão só no Windows.
 
+## Publicando uma versão (GitHub Releases)
+
+O workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) compila e publica a release sozinho:
+
+1. Suba a versão nos três arquivos: `package.json`, `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml` (ex.: `0.1.5` → `0.1.6`).
+2. Faça o commit e o push para a `main`.
+3. O GitHub Actions roda `npm ci`, `npm run build` e o electron-builder, e cria a release **`v0.1.6`** com:
+   - `Glitch-Setup-0.1.6.exe` (instalador; instalar por cima atualiza a versão instalada)
+   - `Glitch-0.1.6-portable.exe`
+   - `.AppImage`, `.deb` e `.tar.gz` para Linux (se a parte do Linux falhar, a release sai só com os do Windows)
+
+As notas da release são geradas a partir dos commits/PRs desde a versão anterior. Se a release daquela versão já existir, o workflow não faz nada — então commits que mexem no `package.json` sem trocar a versão não geram release repetida. Também dá para disparar à mão em **Actions → Release → Run workflow**. Se as três versões estiverem diferentes, o workflow avisa (mas publica com a do `package.json`).
+
+Os executáveis não são assinados digitalmente, então o Windows SmartScreen pode avisar na primeira execução ("Mais informações → Executar assim mesmo").
+
 ## Como o Discord vira Matrix
 
 | Discord              | Matrix                                                                 |

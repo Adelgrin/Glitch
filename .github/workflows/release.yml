@@ -1,0 +1,154 @@
+# Publica uma Release no GitHub sempre que a versão do app muda.
+#
+# Fluxo (o mesmo que fazemos à mão):
+#   1. subir a versão em package.json, src-tauri/tauri.conf.json e src-tauri/Cargo.toml
+#   2. commit + push para a main
+#   3. este workflow compila (npm run build + electron-builder) e cria a release
+#      "v<versão>" com o instalador, o portátil e os pacotes Linux anexados.
+#
+# Se a release da versão atual já existir, nada é feito — então outros commits
+# que mexem no package.json (ex.: dependências) não geram release repetida.
+# Também dá para rodar manualmente em Actions → Release → Run workflow.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  check:
+    name: Verificar versão
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_release: ${{ steps.exists.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ler versão
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAURI=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CARGO=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -n1)
+          echo "package.json=$VERSION tauri.conf.json=$TAURI Cargo.toml=$CARGO"
+          if [ "$VERSION" != "$TAURI" ] || [ "$VERSION" != "$CARGO" ]; then
+            echo "::warning::Versões diferentes: package.json=$VERSION, tauri.conf.json=$TAURI, Cargo.toml=$CARGO"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Release já existe?
+        id: exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::notice::A release v$VERSION já existe — nada a fazer. Suba a versão para publicar outra."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  windows:
+    name: Windows (instalador + portátil)
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
+    runs-on: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false # sem certificado de assinatura
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Compilar a interface
+        run: npm run build
+
+      - name: Gerar instalador e portátil
+        run: npx electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            release/Glitch-Setup-*.exe
+            release/Glitch-*-portable.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux (AppImage, deb, tar.gz)
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Compilar a interface
+        run: npm run build
+
+      - name: Gerar pacotes
+        run: npx electron-builder --linux AppImage deb tar.gz --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publicar release
+    needs: [check, windows, linux]
+    # O Linux é bônus: se só ele falhar, a release sai com os arquivos do Windows.
+    if: >-
+      always() &&
+      needs.check.outputs.should_release == 'true' &&
+      needs.windows.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Criar release v${{ needs.check.outputs.version }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          ls -la artifacts
+          gh release create "v$VERSION" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --generate-notes
